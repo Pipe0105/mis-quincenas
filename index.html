@@ -210,6 +210,7 @@ input[type=checkbox]{width:18px;height:18px;padding:0;accent-color:var(--accent)
 .legend .sq{width:12px;height:12px;border-radius:3px;display:inline-block}
 .legend .ln{width:18px;height:0;border-top:2px dashed var(--ink);display:inline-block}
 .tip{margin:0;min-height:1.3em}.tip.on{color:var(--ink)}
+.danger-zone{border-color:var(--bad)}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(92px + env(safe-area-inset-bottom,0px));z-index:30;background:var(--ink);color:var(--bg);padding:10px 12px 10px 16px;border-radius:12px;font-size:.9rem;display:flex;gap:12px;align-items:center;max-width:calc(100% - 32px)}
 .toast button{border:0;background:none;color:var(--accent);font-weight:600;filter:brightness(1.4)}
 @media (prefers-reduced-motion:no-preference){.bar i,.progress i{transition:width .45s ease}.sheet{animation:up .22s ease}@keyframes up{from{transform:translateY(24px);opacity:.6}to{transform:none;opacity:1}}}
@@ -310,7 +311,7 @@ function render(){
   if(!loaded)return;
   aplicarAspecto();asegurarAvatar();pintarTabPerfil();
   if(cfg){const mo=cfg.modoQuincena||'calendario';try{localStorage.setItem('misquincenas.modo',mo)}catch(e){}if(mo!==render.modo){if(render.modo!==undefined||curQ!==qKey(today()))curQ=qKey(today());render.modo=mo}}
-  if(!cfg){const loc=datosLocales();view.innerHTML=`<div class="empty"><h2>Tu cuenta está lista</h2><p>Aún no tiene datos. Elige cómo empezar:</p><p style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">${loc?'<button class="btn primary" data-act="subirlocal">Subir los datos de este dispositivo</button>':''}<button class="btn ${loc?'':'primary'}" data-act="importar">Restaurar una copia</button><button class="btn" data-act="initcfg">Empezar desde cero</button></p></div>`;return}
+  if(!cfg){const loc=datosLocales();view.innerHTML=`<div class="empty"><h2>Tu cuenta está lista</h2><p>Aún no tiene datos. Elige cómo empezar. Si eliges “desde cero”, tú mismo armas tu sueldo y tu presupuesto en Perfil.</p><p style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">${loc?'<button class="btn primary" data-act="subirlocal">Subir los datos de este dispositivo</button>':''}<button class="btn ${loc?'':'primary'}" data-act="importar">Restaurar una copia</button><button class="btn" data-act="initcfg">Empezar desde cero</button></p></div>`;return}
   view.innerHTML=({inicio:vInicio,movs:vMovs,metas:vResumen,ajustes:vAjustes}[curView])();
 }
 
@@ -444,6 +445,11 @@ function vAjustes(){
   <div class="card"><h2>Copias de seguridad</h2><p class="small muted" style="margin:0">Tus datos ya están en la nube. Igual puedes descargar una copia de vez en cuando. Restaurar una copia reemplaza todo lo que tienes en tu cuenta.</p>
     <p class="small" style="margin:0">Última copia: <b>${(()=>{try{return localStorage.getItem(KEY+'.ultimaCopia')||'nunca'}catch(e){return 'nunca'}})()}</b></p>
     <div class="row" style="justify-content:flex-start"><button class="btn primary" data-act="exportar">Descargar copia</button><button class="btn" data-act="importar">Restaurar copia</button></div></div>
+  <div class="card danger-zone"><h2>Empezar de cero</h2>
+    <p class="small muted" style="margin:0">Borra tus movimientos, presupuesto, deudas y metas para que armes todo tú mismo. Tu nombre, foto y colores se mantienen. Te recomiendo descargar una copia antes.</p>
+    ${borrarPaso?`<div class="field"><label for="confBorrar">Escribe <b>BORRAR</b> para confirmar</label><input id="confBorrar" autocomplete="off" autocapitalize="characters" placeholder="BORRAR"></div>
+    <div class="row" style="justify-content:flex-start"><button class="btn danger" data-act="borrartodo">Borrar todo</button><button class="btn" data-act="cancelarborrar">Cancelar</button></div>`
+    :'<div><button class="btn danger" data-act="pedirborrar">Borrar todos mis datos</button></div>'}</div>
   </section>`}
 
 /* Edición de ajustes */
@@ -472,7 +478,8 @@ document.addEventListener('click',e=>{const b=e.target.closest('[data-act]');if(
   else if(a==='delcat'){const old=JSON.parse(JSON.stringify(cfg));cfg.categorias.splice(i,1);saveCfg();render();toast('Categoría quitada',()=>{cfg=old;saveCfg();render()})}
   else if(a==='adddeuda'){cfg.deudas.push({id:newId(),nombre:'Nueva deuda',total:0,pagadoInicial:0,nota:''});saveCfg();render()}
   else if(a==='deldeuda'){const old=JSON.parse(JSON.stringify(cfg));const id=cfg.deudas[i].id;cfg.deudas.splice(i,1);cfg.categorias.forEach(c=>{if(c.deudaId===id)c.deudaId=''});saveCfg();render();toast('Deuda quitada',()=>{cfg=old;saveCfg();render()})}
-  else if(a==='initcfg'){cfg={salario:0,ssPct:8,otrosIngresos:0,metaFondo:0,fondoInicial:0,deudas:[],categorias:[{id:newId(),clave:'salario',nombre:'Salario',tipo:'ingreso',mensual:0},{id:newId(),nombre:'Mercado',tipo:'gasto',mensual:0,cuando:'ambas'},{id:newId(),nombre:'Transporte',tipo:'gasto',mensual:0,cuando:'ambas'},{id:newId(),nombre:'Fondo de emergencia',tipo:'ahorro',mensual:0,cuando:'ambas',fijo:true}]};saveCfg();curView='ajustes';render()}
+  else if(a==='initcfg'){const pf=srv.perfil||{};cfg={modoQuincena:pf.modo_quincena||'pago_15_30',nombre:pf.nombre||'',frase:pf.frase||'',color:pf.color_acento||'azul',tema:pf.tema||'auto',avatarPath:pf.avatar_path||null,
+    salario:0,ssPct:8,otrosIngresos:0,metaFondo:0,fondoInicial:0,deudas:[],categorias:[{id:newId(),clave:'salario',nombre:'Salario',tipo:'ingreso',mensual:0},{id:newId(),nombre:'Fondo de emergencia',tipo:'ahorro',mensual:0,cuando:'ambas',fijo:true}]};saveCfg();curView='ajustes';render();toast('Listo. Arma tu presupuesto aquí: agrega tus categorías y montos.')}
 });
 
 /* Hoja de registro */
@@ -793,6 +800,19 @@ document.addEventListener('click',e=>{const b=e.target.closest('[data-act]');if(
     if(a==='restab'){resTab=b.dataset.t;render();return}if(a==='prevm'){curMes=mesShift(curMes,-1);render();return}if(a==='nextm'){curMes=mesShift(curMes,1);render();return}}
   const t=e.target.closest('[data-tip]');const tip=document.querySelector('#tipB');if(t&&tip){tip.textContent=t.dataset.tip;tip.classList.add('on')}});
 document.addEventListener('pointerover',e=>{const t=e.target.closest&&e.target.closest('[data-tip]');const tip=document.querySelector('#tipB');if(t&&tip&&e.pointerType==='mouse'){tip.textContent=t.dataset.tip;tip.classList.add('on')}});
+
+/* Borrar todo (va a la papelera de la base; la app empieza en limpio) */
+let borrarPaso=false;
+async function borrarTodo(){const u=user.id,now=new Date().toISOString();
+  for(const t of ['movimientos','operaciones_inversion','inversiones','categorias','deudas','metas','cuentas'])ok(await sb.from(t).update({borrado_en:now}).eq('user_id',u).is('borrado_en',null));
+  ok(await sb.from('perfiles').update({configurado:false,salario_mensual:0,otros_ingresos_mensual:0}).eq('user_id',u));
+  try{localStorage.removeItem(cacheKey())}catch(e){}await refreshAll()}
+document.addEventListener('click',async e=>{const b=e.target.closest('[data-act]');if(!b)return;const a=b.dataset.act;
+  if(a==='pedirborrar'){borrarPaso=true;render();setTimeout(()=>{const i=document.querySelector('#confBorrar');if(i){i.focus();i.scrollIntoView({block:'center'})}},50)}
+  else if(a==='cancelarborrar'){borrarPaso=false;if(document.activeElement)document.activeElement.blur();render()}
+  else if(a==='borrartodo'){const i=document.querySelector('#confBorrar');if(!i||i.value.trim().toUpperCase()!=='BORRAR'){toast('Escribe BORRAR para confirmar.');i&&i.focus();return}
+    b.disabled=true;b.textContent='Borrando…';i.blur();
+    try{await borrarTodo();borrarPaso=false;curView='inicio';curQ=qKey(today());render();toast('Listo, empiezas de cero.')}catch(err){b.disabled=false;b.textContent='Borrar todo';toast('No se pudo borrar. Revisa tu conexión.')}}});
 
 db=cloudDb;
 db.doc('fin/config').onSnapshot(s=>{cfg=s.exists?JSON.parse(JSON.stringify(s.data())):null;loaded=true;render()});
