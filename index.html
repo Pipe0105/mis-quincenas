@@ -10,6 +10,8 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Quincenas">
+<script src="config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon-192.png" type="image/png">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
@@ -185,10 +187,10 @@ input[type=checkbox]{width:18px;height:18px;padding:0;accent-color:var(--accent)
 </head>
 <body>
 <main><div class="wrap" id="view">
-  <div class="empty"><h2>Abriendo tu libreta</h2><p>Aquí verás cuánto puedes gastar esta quincena, qué te falta pagar y cómo van tus metas.</p></div>
+  <div class="empty"><h2>Abriendo Mis Quincenas</h2><p>Aquí verás cuánto puedes gastar esta quincena, qué te falta pagar y cómo van tus metas.</p></div>
 </div></main>
 
-<nav class="tabbar" aria-label="Secciones"><div class="wrap">
+<nav class="tabbar" aria-label="Secciones" hidden><div class="wrap">
   <button data-view="inicio" aria-current="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>Inicio</button>
   <button data-view="movs" aria-current="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h10"/></svg>Movimientos</button>
   <button class="plus" id="plus" aria-label="Registrar movimiento">+</button>
@@ -262,9 +264,10 @@ function render(){
   if(view.contains(document.activeElement)&&document.activeElement.matches('input,select')){pending=true;return}
   pending=false;
   document.querySelectorAll('.tabbar [data-view]').forEach(b=>b.setAttribute('aria-current',String(b.dataset.view===curView)));
-  if(!db){view.innerHTML=`<div class="empty"><h2>Cargando…</h2></div>`;return}
+  if(!sb){return}
+  if(!user){if(!entered)renderAuth();return}
   if(!loaded)return;
-  if(!cfg){view.innerHTML=`<div class="empty"><h2>Tu libreta está vacía</h2><p>Empieza con una configuración básica y ajusta tu sueldo y presupuesto después.</p><p style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap"><button class="btn primary" data-act="importar">Restaurar una copia</button><button class="btn" data-act="initcfg">Empezar desde cero</button></p><p class="small">Tus datos se guardan solo en este dispositivo.</p></div>`;return}
+  if(!cfg){const loc=datosLocales();view.innerHTML=`<div class="empty"><h2>Tu cuenta está lista</h2><p>Aún no tiene datos. Elige cómo empezar:</p><p style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">${loc?'<button class="btn primary" data-act="subirlocal">Subir los datos de este dispositivo</button>':''}<button class="btn ${loc?'':'primary'}" data-act="importar">Restaurar una copia</button><button class="btn" data-act="initcfg">Empezar desde cero</button></p></div>`;return}
   view.innerHTML=({inicio:vInicio,movs:vMovs,metas:vMetas,ajustes:vAjustes}[curView])();
 }
 
@@ -379,7 +382,9 @@ function vAjustes(){
     <div class="field"><label for="mf">Meta</label><input id="mf" class="num" inputmode="numeric" data-bind="metaFondo" data-money value="${fmt(cfg.metaFondo)}"></div>
     <div class="field"><label for="fi">Lo que ya tenías ahorrado</label><input id="fi" class="num" inputmode="numeric" data-bind="fondoInicial" data-money value="${fmt(cfg.fondoInicial)}"></div></div></div>
   <div class="card"><h2>Deudas</h2><div>${deudas||'<p class="small muted">Sin deudas.</p>'}</div><button class="btn ghost" data-act="adddeuda">+ Agregar deuda</button></div>
-  <div class="card"><h2>Tus datos</h2><p class="small muted" style="margin:0">Todo se guarda solo en este dispositivo. Descarga una copia cada semana y guárdala en iCloud o Drive: si borras los datos del navegador o cambias de celular, con ella recuperas todo.</p>
+  <div class="card"><h2>Tu cuenta</h2><p class="small" style="margin:0">Conectado como <b>${esc(user&&user.email)}</b>. Tus datos se sincronizan entre todos los dispositivos donde entres con esta cuenta.</p>
+    <div class="row" style="justify-content:flex-start"><button class="btn" data-act="logout">Cerrar sesión</button></div></div>
+  <div class="card"><h2>Copias de seguridad</h2><p class="small muted" style="margin:0">Tus datos ya están en la nube. Igual puedes descargar una copia de vez en cuando. Restaurar una copia reemplaza todo lo que tienes en tu cuenta.</p>
     <p class="small" style="margin:0">Última copia: <b>${(()=>{try{return localStorage.getItem(KEY+'.ultimaCopia')||'nunca'}catch(e){return 'nunca'}})()}</b></p>
     <div class="row" style="justify-content:flex-start"><button class="btn primary" data-act="exportar">Descargar copia</button><button class="btn" data-act="importar">Restaurar copia</button></div></div>
   </section>`}
@@ -454,40 +459,114 @@ $('#movForm').addEventListener('submit',async e=>{e.preventDefault();
     curQ=qKey(fecha);closeSheet();render()}
   catch(x){err.textContent=x&&x.code==='quota_exceeded'?'Tu libreta está llena. Borra movimientos viejos.':'No se guardó. Revisa tu conexión e intenta de nuevo.';err.hidden=false}});
 
-/* Almacenamiento local (en este dispositivo) con la misma forma que usa la app */
+/* Cuenta y base de datos en la nube (Supabase), con copia local para abrir rápido y sin internet */
 const KEY='misquincenas.v1';
-function loadAll(){try{const r=JSON.parse(localStorage.getItem(KEY)||'null');if(r&&typeof r==='object')return{config:r.config||null,movs:r.movs||{}}}catch(e){}return{config:null,movs:{}}}
-let store=loadAll();const subs={config:[],movs:[]};
-function persist(){try{localStorage.setItem(KEY,JSON.stringify(store));return true}catch(e){toast('No se pudo guardar en este dispositivo.');return false}}
-function emit(){const c=store.config?JSON.parse(JSON.stringify(store.config)):null;
-  subs.config.forEach(f=>f({exists:!!c,data:()=>c,metadata:{fromCache:false}}));
-  const docs=Object.entries(store.movs).map(([id,d])=>({id,exists:true,data:()=>d}));subs.movs.forEach(f=>f({docs}))}
-const localDb={
+const CONF=window.MQ_CONFIG||{};
+let sb=null,user=null,authView='login',authMsg='',entered=false,channel=null;
+const newId=()=>(crypto&&crypto.randomUUID)?crypto.randomUUID():'10000000-1000-4000-8000-100000000000'.replace(/[018]/g,c=>(c^Math.random()*16>>c/4).toString(16));
+const subs={config:[],movs:[]};let cloud={config:null,movs:[]};
+const cacheKey=()=>'misquincenas.cache.'+(user?user.id:'');
+function saveCache(){try{localStorage.setItem(cacheKey(),JSON.stringify(cloud))}catch(e){}}
+function emitConfig(){const c=cloud.config?JSON.parse(JSON.stringify(cloud.config)):null;subs.config.forEach(f=>f({exists:!!c,data:()=>c,metadata:{fromCache:false}}))}
+function emitMovs(){const docs=cloud.movs.map(r=>({id:r.id,exists:true,data:()=>({fecha:r.fecha,tipo:r.tipo,cat:r.cat,monto:+r.monto,nota:r.nota||'',creado:r.creado})}));subs.movs.forEach(f=>f({docs}))}
+async function refreshConfig(){const{data,error}=await sb.from('perfiles').select('config').eq('user_id',user.id).maybeSingle();if(error)throw error;cloud.config=data&&data.config&&Object.keys(data.config).length?data.config:null;saveCache();emitConfig()}
+async function refreshMovs(){const{data,error}=await sb.from('movimientos').select('id,fecha,tipo,cat,monto,nota,creado').eq('user_id',user.id).order('fecha',{ascending:false}).limit(5000);if(error)throw error;cloud.movs=data||[];saveCache();emitMovs()}
+let refreshT=null;function refreshSoon(){clearTimeout(refreshT);refreshT=setTimeout(()=>{if(user)Promise.all([refreshConfig(),refreshMovs()]).catch(()=>{})},300)}
+const cloudDb={
   doc(path){const[col,id]=path.split('/');return{
-    onSnapshot(f){subs.config.push(f);setTimeout(()=>f({exists:!!store.config,data:()=>store.config?JSON.parse(JSON.stringify(store.config)):undefined,metadata:{fromCache:false}}),0);return()=>{}},
-    async set(d){if(col==='fin')store.config=JSON.parse(JSON.stringify(d));else store.movs[id]=JSON.parse(JSON.stringify(d));persist();emit()},
-    async delete(){if(col==='movs'){delete store.movs[id];persist();emit()}}}},
-  collection(){return{
-    onSnapshot(f){subs.movs.push(f);setTimeout(()=>f({docs:Object.entries(store.movs).map(([id,d])=>({id,exists:true,data:()=>d}))}),0);return()=>{}},
-    async add(d){const id='m'+Date.now().toString(36)+uid();store.movs[id]=JSON.parse(JSON.stringify(d));persist();emit();return localDb.doc('movs/'+id)}}}};
-window.addEventListener('storage',e=>{if(e.key===KEY){store=loadAll();emit()}});
+    onSnapshot(f){subs.config.push(f);return()=>{}},
+    async set(d){
+      if(col==='fin'){cloud.config=JSON.parse(JSON.stringify(d));emitConfig();
+        const{error}=await sb.from('perfiles').upsert({user_id:user.id,config:d,updated_at:new Date().toISOString()});if(error){refreshConfig().catch(()=>{});throw error}saveCache();return}
+      const row={id,user_id:user.id,fecha:d.fecha,tipo:d.tipo,cat:d.cat,monto:Math.round(+d.monto||0),nota:d.nota||'',creado:d.creado||new Date().toISOString()};
+      const i=cloud.movs.findIndex(r=>r.id===id);if(i>=0)cloud.movs[i]=row;else cloud.movs.push(row);emitMovs();
+      const{error}=await sb.from('movimientos').upsert(row);if(error){refreshMovs().catch(()=>{});throw error}saveCache()},
+    async delete(){if(col!=='movs')return;cloud.movs=cloud.movs.filter(r=>r.id!==id);emitMovs();
+      const{error}=await sb.from('movimientos').delete().eq('id',id);if(error){refreshMovs().catch(()=>{});throw error}saveCache()}}},
+  collection(){return{onSnapshot(f){subs.movs.push(f);return()=>{}},
+    async add(d){const id=newId();await cloudDb.doc('movs/'+id).set(d);return cloudDb.doc('movs/'+id)}}}};
 
-/* Copias de seguridad */
-function exportar(){const blob=new Blob([JSON.stringify({app:'mis-quincenas',version:1,exportado:new Date().toISOString(),config:store.config,movs:store.movs},null,2)],{type:'application/json'});
+/* Copias de seguridad e importación */
+function exportar(){const out={};movs.forEach(m=>{const c=Object.assign({},m);delete c.id;out[m.id]=c});
+  const blob=new Blob([JSON.stringify({app:'mis-quincenas',version:1,exportado:new Date().toISOString(),config:cfg,movs:out},null,2)],{type:'application/json'});
   const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='mis-quincenas-respaldo-'+today()+'.json';document.body.appendChild(a);a.click();
   setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},1000);try{localStorage.setItem(KEY+'.ultimaCopia',today())}catch(e){}toast('Copia descargada');render()}
-function importar(file){const r=new FileReader();r.onload=()=>{try{const d=JSON.parse(r.result);if(!d||d.app!=='mis-quincenas'||!d.config)throw 0;
-    store={config:d.config,movs:d.movs||{}};persist();emit();curView='inicio';render();toast('Datos restaurados')}catch(e){toast('Ese archivo no es una copia de Mis Quincenas.')}};r.readAsText(file)}
+async function cargarDatos(d,reemplazar){
+  await cloudDb.doc('fin/config').set(d.config);
+  if(reemplazar){const{error}=await sb.from('movimientos').delete().eq('user_id',user.id);if(error)throw error}
+  const rows=Object.values(d.movs||{}).map(m=>({id:newId(),user_id:user.id,fecha:m.fecha,tipo:m.tipo,cat:m.cat,monto:Math.round(+m.monto||0),nota:m.nota||'',creado:m.creado||new Date().toISOString()})).filter(r=>r.monto>0&&r.fecha&&r.tipo);
+  for(let i=0;i<rows.length;i+=500){const{error}=await sb.from('movimientos').insert(rows.slice(i,i+500));if(error)throw error}
+  await refreshMovs()}
+function importar(file){const r=new FileReader();r.onload=async()=>{let d;try{d=JSON.parse(r.result);if(!d||d.app!=='mis-quincenas'||!d.config)throw 0}catch(e){toast('Ese archivo no es una copia de Mis Quincenas.');return}
+  try{toast('Restaurando…');await cargarDatos(d,true);curView='inicio';render();toast('Datos restaurados en tu cuenta')}catch(e){toast('No se pudo restaurar. Revisa tu conexión.')}};r.readAsText(file)}
+function datosLocales(){try{const r=JSON.parse(localStorage.getItem(KEY)||'null');return r&&r.config?r:null}catch(e){return null}}
+async function subirLocales(){const d=datosLocales();if(!d)return;try{toast('Subiendo…');await cargarDatos({config:d.config,movs:d.movs||{}},false);curView='inicio';render();toast('Datos de este dispositivo subidos a tu cuenta')}catch(e){toast('No se pudo subir. Revisa tu conexión.')}}
 const fileIn=document.createElement('input');fileIn.type='file';fileIn.accept='application/json,.json';fileIn.hidden=true;document.body.appendChild(fileIn);
 fileIn.addEventListener('change',()=>{if(fileIn.files[0])importar(fileIn.files[0]);fileIn.value=''});
-document.addEventListener('click',e=>{const b=e.target.closest('[data-act]');if(!b)return;
-  if(b.dataset.act==='exportar')exportar();else if(b.dataset.act==='importar')fileIn.click()});
+
+/* Pantallas de acceso */
+const AUTH={login:['Entra a tu cuenta','Entrar'],registro:['Crea tu cuenta','Crear cuenta'],olvido:['Recupera tu contraseña','Enviarme un enlace'],nuevaclave:['Escribe tu nueva contraseña','Guardar contraseña']};
+function renderAuth(){const[t,b]=AUTH[authView];
+  view.innerHTML=`<section style="max-width:420px;margin:0 auto;padding-top:24px">
+  <div><div class="label">Mis Quincenas</div><h1>${t}</h1><p class="muted small" style="margin:6px 0 0">Tu información queda guardada en tu cuenta y la ves igual en el celular y en el computador.</p></div>
+  <form class="card" id="authForm" novalidate>
+    ${authView!=='nuevaclave'?`<div class="field"><label for="aEmail">Correo</label><input id="aEmail" type="email" autocomplete="email" inputmode="email" required></div>`:''}
+    ${authView!=='olvido'?`<div class="field"><label for="aPass">Contraseña</label><input id="aPass" type="password" autocomplete="${authView==='login'?'current-password':'new-password'}" minlength="6" required></div>`:''}
+    ${authMsg?`<p class="small" style="margin:0" id="aMsg">${authMsg}</p>`:''}
+    <button class="btn primary wide" type="submit">${b}</button>
+  </form>
+  <div class="row" style="justify-content:center;gap:16px">
+    ${authView!=='login'?'<button class="pill" data-auth="login">Ya tengo cuenta</button>':''}
+    ${authView!=='registro'&&authView!=='nuevaclave'?'<button class="pill" data-auth="registro">Crear cuenta nueva</button>':''}
+    ${authView==='login'?'<button class="pill" data-auth="olvido">Olvidé mi contraseña</button>':''}
+  </div></section>`}
+const errEs=e=>{const m=String(e&&e.message||'');if(/Invalid login/i.test(m))return'Correo o contraseña incorrectos.';if(/already registered|already exists/i.test(m))return'Ya existe una cuenta con ese correo. Entra con tu contraseña.';
+  if(/not confirmed/i.test(m))return'Primero confirma tu correo: revisa tu bandeja de entrada (y la de spam).';if(/at least|Password should/i.test(m))return'La contraseña debe tener al menos 6 caracteres.';
+  if(/rate limit|too many/i.test(m))return'Demasiados intentos. Espera unos minutos.';if(/fetch|network/i.test(m))return'No hay conexión. Revisa tu internet.';return'Algo salió mal: '+esc(m)};
+document.addEventListener('click',e=>{const a=e.target.closest('[data-auth]');if(a){authView=a.dataset.auth;authMsg='';renderAuth();return}
+  const b=e.target.closest('[data-act]');if(!b)return;const act=b.dataset.act;
+  if(act==='exportar')exportar();else if(act==='importar')fileIn.click();else if(act==='subirlocal')subirLocales();
+  else if(act==='logout'){sb.auth.signOut().then(()=>toast('Sesión cerrada'))}});
+document.addEventListener('submit',async e=>{if(e.target.id!=='authForm')return;e.preventDefault();
+  const email=($('#aEmail')||{}).value,pass=($('#aPass')||{}).value,btn=e.target.querySelector('button[type=submit]');
+  const show=(m)=>{authMsg=m;if(document.activeElement)document.activeElement.blur();renderAuth()};
+  if(authView!=='nuevaclave'&&!/^\S+@\S+\.\S+$/.test(email||''))return show('<span class="neg">Escribe un correo válido.</span>');
+  if(authView!=='olvido'&&(pass||'').length<6)return show('<span class="neg">La contraseña debe tener al menos 6 caracteres.</span>');
+  btn.disabled=true;btn.textContent='Un momento…';const back=location.origin+location.pathname;
+  try{
+    if(authView==='login'){const{error}=await sb.auth.signInWithPassword({email,password:pass});if(error)throw error}
+    else if(authView==='registro'){const{data,error}=await sb.auth.signUp({email,password:pass,options:{emailRedirectTo:back}});if(error)throw error;
+      if(!data.session){authView='login';show('<span class="pos">Te enviamos un correo a '+esc(email)+'. Ábrelo y toca el enlace para activar tu cuenta; luego entra aquí.</span>')}}
+    else if(authView==='olvido'){const{error}=await sb.auth.resetPasswordForEmail(email,{redirectTo:back});if(error)throw error;authView='login';show('<span class="pos">Si el correo tiene cuenta, te llegó un enlace para cambiar la contraseña.</span>')}
+    else if(authView==='nuevaclave'){const{error}=await sb.auth.updateUser({password:pass});if(error)throw error;authView='login';authMsg='';toast('Contraseña actualizada');history.replaceState(null,'',back);enterApp()}
+  }catch(err){show('<span class="neg">'+errEs(err)+'</span>')}});
+
+function showAuth(){entered=false;document.querySelector('.tabbar').hidden=true;cfg=null;movs=[];loaded=false;if(channel){sb.removeChannel(channel);channel=null}if(document.activeElement)document.activeElement.blur();renderAuth()}
+async function enterApp(){if(entered)return;entered=true;authMsg='';document.querySelector('.tabbar').hidden=false;
+  try{const c=JSON.parse(localStorage.getItem(cacheKey())||'null');if(c&&typeof c==='object'){cloud={config:c.config||null,movs:c.movs||[]};emitMovs();emitConfig()}}catch(e){}
+  try{await Promise.all([refreshConfig(),refreshMovs()])}
+  catch(e){loaded=true;render();toast(cloud.config?'Sin conexión: ves lo último guardado.':'No pude cargar tus datos. Revisa tu conexión.')}
+  channel=sb.channel('mq-'+user.id)
+    .on('postgres_changes',{event:'*',schema:'public',table:'movimientos',filter:'user_id=eq.'+user.id},refreshSoon)
+    .on('postgres_changes',{event:'*',schema:'public',table:'perfiles',filter:'user_id=eq.'+user.id},refreshSoon).subscribe()}
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&user&&entered)refreshSoon()});
+
 if(navigator.storage&&navigator.storage.persist)navigator.storage.persist().catch(()=>{});
 if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
 
-db=localDb;
+db=cloudDb;
 db.doc('fin/config').onSnapshot(s=>{cfg=s.exists?JSON.parse(JSON.stringify(s.data())):null;loaded=true;render()});
 db.collection('movs').onSnapshot(s=>{movs=s.docs.map(d=>Object.assign({id:d.id},d.data()));render()});
+(async()=>{
+  if(!CONF.supabaseUrl||!CONF.supabaseAnonKey||!window.supabase){document.querySelector('.tabbar').hidden=true;
+    view.innerHTML='<div class="empty"><h2>Falta conectar la base de datos</h2><p>Escribe la URL y la clave pública de Supabase en el archivo config.js.</p></div>';return}
+  sb=window.supabase.createClient(CONF.supabaseUrl,CONF.supabaseAnonKey,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
+  sb.auth.onAuthStateChange((ev,session)=>{
+    if(ev==='PASSWORD_RECOVERY'){user=session&&session.user;authView='nuevaclave';showAuth();return}
+    const nu=session?session.user:null;
+    if(!nu){if(user||!entered){user=null;showAuth()}return}
+    if(!user||user.id!==nu.id){user=nu;entered=false;setTimeout(enterApp,0)}});
+})();
 </script>
 </body>
 </html>

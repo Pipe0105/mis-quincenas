@@ -4,7 +4,8 @@ App personal de finanzas pensada para quien cobra por quincena: muestra cuánto 
 
 - Funciona en el navegador y se instala en la pantalla de inicio (iPhone y Android).
 - Abre sin internet.
-- **Tus datos se guardan solo en tu dispositivo** (no hay servidor). Usa *Ajustes → Descargar copia* con frecuencia.
+- Cuentas de usuario y base de datos con **Supabase**: tus datos se sincronizan entre celular y computador.
+- Cada usuario solo puede ver sus propios datos (Row Level Security).
 
 ## Instalar en el celular
 - **iPhone (Safari):** Compartir → *Agregar a inicio*.
@@ -12,3 +13,9 @@ App personal de finanzas pensada para quien cobra por quincena: muestra cuánto 
 
 ## Actualizar
 Cambia los archivos, sube el número de `CACHE` en `sw.js` y haz push. GitHub Pages publica solo.
+
+## Configurar la base de datos (una sola vez)
+1. Crea un proyecto gratis en [supabase.com](https://supabase.com).
+2. En **SQL Editor**, pega y ejecuta `schema.sql`.
+3. En **Authentication → URL Configuration**, pon como *Site URL* la dirección de GitHub Pages (ej. `https://pipe0105.github.io/mis-quincenas/`).
+4. En **Project Settings → API**, copia la *Project URL* y la *anon public key* en `config.js`.
