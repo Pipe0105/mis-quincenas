@@ -265,11 +265,21 @@ const MES=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','se
 const DIA=['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];
 const pad=n=>String(n).padStart(2,'0');
 function today(){const d=new Date();return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())}
-function qKey(f){const[y,m,d]=f.split('-').map(Number);return y+'-'+pad(m)+'-'+(d<=15?1:2)}
+const modoPago=()=>{let m=cfg&&cfg.modoQuincena;if(!m){try{m=localStorage.getItem('misquincenas.modo')}catch(e){}}return m==='pago_15_30'};
+const lastDay=(y,m)=>new Date(y,m,0).getDate();
+function qKey(f){const[y,m,d]=f.split('-').map(Number);
+  if(modoPago()){if(d<15){const pm=m===1?12:m-1,py=m===1?y-1:y;return py+'-'+pad(pm)+'-2'}return y+'-'+pad(m)+'-'+(d>=Math.min(30,lastDay(y,m))?2:1)}
+  return y+'-'+pad(m)+'-'+(d<=15?1:2)}
+function qBounds(k){const[y,m,h]=k.split('-').map(Number),ld=lastDay(y,m),ds=(Y,M,D)=>Y+'-'+pad(M)+'-'+pad(D);
+  if(modoPago()){const p2=Math.min(30,ld);if(h===1)return{start:ds(y,m,15),end:ds(y,m,p2-1)};return{start:ds(y,m,p2),end:m===12?ds(y+1,1,14):ds(y,m+1,14)}}
+  return h===1?{start:ds(y,m,1),end:ds(y,m,15)}:{start:ds(y,m,16),end:ds(y,m,ld)}}
+function diasEntre(a,b){const out=[],d=new Date(a+'T12:00'),e=new Date(b+'T12:00');while(d<=e){out.push(d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate()));d.setDate(d.getDate()+1)}return out}
+const fechaCorta=x=>+x.slice(8)+' '+MES[+x.slice(5,7)-1].slice(0,3);
 function qShift(k,n){let[y,m,h]=k.split('-').map(Number);const i=(y*12+m-1)*2+h-1+n;y=Math.floor(i/24);const r=i-y*24;return y+'-'+pad(Math.floor(r/2)+1)+'-'+(r%2+1)}
-function qInfo(k){const[y,m,h]=k.split('-').map(Number);const last=new Date(y,m,0).getDate();
-  return{h,name:(h===1?'1ª':'2ª')+' quincena de '+MES[m-1],range:h===1?'del 1 al 15':'del 16 al '+last,short:(h===1?'1ª ':'2ª ')+MES[m-1].slice(0,3)+(y!==new Date().getFullYear()?' '+String(y).slice(2):''),
-    dateIn:()=>{const t=today();if(qKey(t)===k)return t;return y+'-'+pad(m)+'-'+(h===1?'01':'16')},daysLeft:()=>{const t=today();if(qKey(t)!==k)return null;const d=+t.slice(8);return (h===1?15:last)-d+1}}}
+function qInfo(k){const[y,m,h]=k.split('-').map(Number),B=qBounds(k),pago=modoPago();
+  return{h,name:(h===1?'1ª':'2ª')+' quincena de '+MES[m-1],range:pago?'del '+fechaCorta(B.start)+' al '+fechaCorta(B.end):(h===1?'del 1 al 15':'del 16 al '+lastDay(y,m)),
+    short:(h===1?'1ª ':'2ª ')+MES[m-1].slice(0,3)+(y!==new Date().getFullYear()?' '+String(y).slice(2):''),
+    dateIn:()=>{const t=today();return qKey(t)===k?t:B.start},daysLeft:()=>{const t=today();if(qKey(t)!==k)return null;return diasEntre(t,B.end).length}}}
 const sum=a=>a.reduce((t,m)=>t+(+m.monto||0),0);
 
 let db=null,cfg=null,movs=[],curQ=qKey(today()),curView='inicio',loaded=false,pending=false,filtro='todos';
@@ -299,6 +309,7 @@ function render(){
   if(!user){if(!entered)renderAuth();return}
   if(!loaded)return;
   aplicarAspecto();asegurarAvatar();pintarTabPerfil();
+  if(cfg){const mo=cfg.modoQuincena||'calendario';try{localStorage.setItem('misquincenas.modo',mo)}catch(e){}if(mo!==render.modo){if(render.modo!==undefined||curQ!==qKey(today()))curQ=qKey(today());render.modo=mo}}
   if(!cfg){const loc=datosLocales();view.innerHTML=`<div class="empty"><h2>Tu cuenta está lista</h2><p>Aún no tiene datos. Elige cómo empezar:</p><p style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">${loc?'<button class="btn primary" data-act="subirlocal">Subir los datos de este dispositivo</button>':''}<button class="btn ${loc?'':'primary'}" data-act="importar">Restaurar una copia</button><button class="btn" data-act="initcfg">Empezar desde cero</button></p></div>`;return}
   view.innerHTML=({inicio:vInicio,movs:vMovs,metas:vResumen,ajustes:vAjustes}[curView])();
 }
@@ -320,7 +331,8 @@ function vInicio(){
   const ing=sum(qm.filter(m=>m.tipo==='ingreso')),gas=sum(qm.filter(m=>m.tipo==='gasto')),aho=sum(qm.filter(m=>m.tipo==='ahorro'));
   const pend=pendientes(curQ);
   const salPend=pend.find(p=>p.c.clave==='salario');const esperado=salPend&&salPend.hecho<salPend.meta?salPend.meta-salPend.hecho:0;
-  const porPagar=pend.filter(p=>p.c.clave!=='salario').reduce((t,p)=>t+Math.max(p.meta-p.hecho,0),0);
+  const facturas=cfg.categorias.filter(c=>c.tipo==='gasto'&&!c.fijo&&c.enRitmo===false).reduce((t,c)=>t+Math.max(catQ(c,curQ)-sum(qm.filter(m=>m.cat===c.id)),0),0);
+  const porPagar=pend.filter(p=>p.c.clave!=='salario').reduce((t,p)=>t+Math.max(p.meta-p.hecho,0),0)+facturas;
   const libre=ing+esperado-gas-aho-porPagar;
   const done=pend.filter(p=>p.hecho>=p.meta-1).length;
   const todos=pend.map(p=>{const ok=p.hecho>=p.meta-1;const falta=p.meta-p.hecho;
@@ -417,7 +429,8 @@ function vAjustes(){
   <div class="card"><h2>Tu sueldo</h2><div class="grid2">
     <div class="field"><label for="sal">Salario mensual (antes de descuentos)</label><input id="sal" class="num" inputmode="numeric" data-bind="salario" data-money value="${fmt(cfg.salario)}"></div>
     <div class="field"><label for="ss">Salud y pensión (%)</label><input id="ss" class="num" inputmode="decimal" data-bind="ssPct" data-number value="${esc(cfg.ssPct)}"></div>
-    <div class="field"><label for="oi">Otros ingresos al mes</label><input id="oi" class="num" inputmode="numeric" data-bind="otrosIngresos" data-money value="${fmt(cfg.otrosIngresos)}"></div></div>
+    <div class="field"><label for="oi">Otros ingresos al mes</label><input id="oi" class="num" inputmode="numeric" data-bind="otrosIngresos" data-money value="${fmt(cfg.otrosIngresos)}"></div>
+    <div class="field" style="grid-column:1/-1"><label for="mq">Mis quincenas van</label><select id="mq" data-bind="modoQuincena"><option value="pago_15_30" ${cfg.modoQuincena==='pago_15_30'?'selected':''}>De pago a pago (me pagan el 15 y el 30)</option><option value="calendario" ${cfg.modoQuincena!=='pago_15_30'?'selected':''}>Del 1 al 15 y del 16 a fin de mes</option></select></div></div>
     <p class="small muted" style="margin:0">Te llegan cerca de <b class="num">${fmt(nq)}</b> por quincena.</p></div>
   <div class="card"><div class="row"><h2>Tu presupuesto</h2><span class="small muted num">${fmt(mesPlan)} / mes</span></div>
     <p class="small muted" style="margin:0">Los pagos fijos aparecen en Inicio como pendientes; los demás, como barras de presupuesto.</p>
@@ -515,7 +528,7 @@ const cacheKey=()=>'misquincenas.cache2.'+(user?user.id:'');
 function saveCache(){try{localStorage.setItem(cacheKey(),JSON.stringify({srv,srvEstado}))}catch(e){}}
 const fondoMeta=()=>srv.metas.find(m=>m.tipo==='fondo_emergencia');
 function buildCfg(){const p=srv.perfil;if(!p||!p.configurado)return null;const f=fondoMeta();
-  return{nombre:p.nombre||'',frase:p.frase||'',color:p.color_acento||'azul',tema:p.tema||'auto',avatarPath:p.avatar_path||null,salario:+p.salario_mensual,ssPct:+p.pct_seguridad_social,otrosIngresos:+p.otros_ingresos_mensual,
+  return{modoQuincena:p.modo_quincena||'calendario',nombre:p.nombre||'',frase:p.frase||'',color:p.color_acento||'azul',tema:p.tema||'auto',avatarPath:p.avatar_path||null,salario:+p.salario_mensual,ssPct:+p.pct_seguridad_social,otrosIngresos:+p.otros_ingresos_mensual,
     metaFondo:f?+f.monto_objetivo:0,fondoInicial:f?+f.ahorrado_inicial:0,fondoId:f?f.id:null,
     categorias:srv.categorias.slice().sort((a,b)=>a.orden-b.orden).map(c=>({id:c.id,nombre:c.nombre,tipo:c.tipo,clave:c.clave||null,mensual:+c.presupuesto_mensual,cuando:c.cuando,fijo:c.fijo,enRitmo:c.en_ritmo!==false,deudaId:c.deuda_id||''})),
     deudas:srv.deudas.map(d=>({id:d.id,nombre:d.nombre,total:+d.monto_total,pagadoInicial:+d.pagado_inicial,nota:d.nota}))}}
@@ -539,7 +552,7 @@ async function refreshAll(){const u=user.id;
 let refreshT=null;function refreshSoon(){clearTimeout(refreshT);refreshT=setTimeout(()=>{if(user)refreshAll().catch(()=>{})},350)}
 
 async function guardarConfig(d){const u=user.id,now=new Date().toISOString();
-  ok(await sb.from('perfiles').upsert({user_id:u,nombre:String(d.nombre||'').slice(0,80),frase:String(d.frase||'').slice(0,120),color_acento:COLORES[d.color]?d.color:'azul',tema:['auto','claro','oscuro'].includes(d.tema)?d.tema:'auto',salario_mensual:Math.round(+d.salario||0),pct_seguridad_social:+d.ssPct||0,otros_ingresos_mensual:Math.round(+d.otrosIngresos||0),configurado:true}));
+  ok(await sb.from('perfiles').upsert({user_id:u,modo_quincena:d.modoQuincena==='pago_15_30'?'pago_15_30':'calendario',nombre:String(d.nombre||'').slice(0,80),frase:String(d.frase||'').slice(0,120),color_acento:COLORES[d.color]?d.color:'azul',tema:['auto','claro','oscuro'].includes(d.tema)?d.tema:'auto',salario_mensual:Math.round(+d.salario||0),pct_seguridad_social:+d.ssPct||0,otros_ingresos_mensual:Math.round(+d.otrosIngresos||0),configurado:true}));
   const f=fondoMeta();const fondoId=d.fondoId||(f&&f.id)||newId();d.fondoId=fondoId;if(cfg)cfg.fondoId=fondoId;
   ok(await sb.from('metas').upsert({id:fondoId,user_id:u,nombre:'Fondo de emergencia',tipo:'fondo_emergencia',monto_objetivo:Math.round(+d.metaFondo||0),ahorrado_inicial:Math.round(+d.fondoInicial||0),borrado_en:null}));
   const dIds=new Set(d.deudas.map(x=>x.id));
@@ -579,7 +592,7 @@ async function cargarDatos(d,reemplazar){
   const tipos={};
   const categorias=(src.categorias||[]).map(c=>{const clave=c.clave||(c.id==='sal'?'salario':null);const n=clave==='salario'&&salExist?salExist.id:newId();idMap[c.id]=n;tipos[n]=c.tipo;
     return Object.assign({},c,{id:n,clave,deudaId:c.deudaId?dMap[c.deudaId]||'':''})});
-  const nuevo={nombre:src.nombre??(cfg&&cfg.nombre)??'',frase:src.frase??(cfg&&cfg.frase)??'',color:src.color||(cfg&&cfg.color)||'azul',tema:src.tema||(cfg&&cfg.tema)||'auto',salario:src.salario,ssPct:src.ssPct,otrosIngresos:src.otrosIngresos,metaFondo:src.metaFondo,fondoInicial:src.fondoInicial,fondoId:null,deudas:reemplazar?deudas:(cfg?cfg.deudas:[]).concat(deudas),categorias};
+  const nuevo={modoQuincena:src.modoQuincena||(cfg&&cfg.modoQuincena)||'calendario',nombre:src.nombre??(cfg&&cfg.nombre)??'',frase:src.frase??(cfg&&cfg.frase)??'',color:src.color||(cfg&&cfg.color)||'azul',tema:src.tema||(cfg&&cfg.tema)||'auto',salario:src.salario,ssPct:src.ssPct,otrosIngresos:src.otrosIngresos,metaFondo:src.metaFondo,fondoInicial:src.fondoInicial,fondoId:null,deudas:reemplazar?deudas:(cfg?cfg.deudas:[]).concat(deudas),categorias};
   if(!reemplazar&&cfg){nuevo.categorias=cfg.categorias.concat(categorias.filter(c=>!(c.clave==='salario'&&cfg.categorias.some(x=>x.clave==='salario'))))}
   await guardarConfig(nuevo);
   if(reemplazar){ok(await sb.from('movimientos').update({borrado_en:new Date().toISOString()}).eq('user_id',user.id).is('borrado_en',null))}
@@ -745,16 +758,16 @@ function vGraficas(){
   svg+=`<line x1="${L}" x2="${W-R}" y1="${y(0)}" y2="${y(0)}" stroke="var(--muted)" stroke-width="1"/></svg>`;
   const tabla=`<table><thead><tr><th>Mes</th><th>Entró</th><th>Gastos</th><th>Ahorro</th></tr></thead><tbody>${datos.map(d=>`<tr><td>${mesLabel(d.k)}</td><td class="num">${fmt(d.i)}</td><td class="num">${fmt(d.g)}</td><td class="num">${fmt(d.a)}</td></tr>`).join('')}</tbody></table>`;
   /* C. Ritmo de gasto de la quincena */
-  const qk=qKey(today()),[qy,qm_,qh]=qk.split('-').map(Number),d0=qh===1?1:16,d1=qh===1?15:new Date(qy,qm_,0).getDate(),hoy=+today().slice(8);
+  const qk=qKey(today()),QB=qBounds(qk),dias=diasEntre(QB.start,QB.end),d0=0,d1=dias.length-1,hoy=Math.max(0,dias.indexOf(today()));
   const varCats=cfg.categorias.filter(c=>c.tipo==='gasto'&&!c.fijo&&c.enRitmo!==false),varIds=new Set(varCats.map(c=>c.id));
   const presVar=varCats.reduce((t,c)=>t+catQ(c,qk),0);
   const qmv=movs.filter(m=>qKey(m.fecha)===qk&&m.tipo==='gasto'&&varIds.has(m.cat));
-  const acum=[];let run=0;for(let d=d0;d<=Math.min(hoy,d1);d++){run+=sum(qmv.filter(m=>+m.fecha.slice(8)===d));acum.push([d,run])}
+  const acum=[];let run=0;for(let d=d0;d<=Math.min(hoy,d1);d++){run+=sum(qmv.filter(m=>m.fecha===dias[d]));acum.push([d,run])}
   const W2=340,H2=170,L2=44,R2=10,T2=12,B2=24,pw2=W2-L2-R2,ph2=H2-T2-B2,top2=nice(Math.max(presVar,run,1));
   const x2=d=>L2+(d-d0)/Math.max(1,d1-d0)*pw2,y2=v=>T2+ph2-v/top2*ph2;
   let s2=`<svg viewBox="0 0 ${W2} ${H2}" class="chart" role="img" aria-label="Gasto acumulado de la quincena comparado con el ritmo ideal">`;
   for(let j=0;j<=3;j++){const v=top2*j/3;s2+=`<line x1="${L2}" x2="${W2-R2}" y1="${y2(v)}" y2="${y2(v)}" stroke="var(--line)"/><text x="${L2-6}" y="${y2(v)+3.5}" text-anchor="end" class="ax">${corto(v)}</text>`}
-  [d0,Math.round((d0+d1)/2),d1].forEach((d,j)=>s2+=`<text x="${x2(d)}" y="${H2-7}" text-anchor="${['start','middle','end'][j]}" class="ax">${d} ${MES[qm_-1].slice(0,3)}</text>`);
+  [d0,Math.round((d0+d1)/2),d1].forEach((d,j)=>s2+=`<text x="${x2(d)}" y="${H2-7}" text-anchor="${['start','middle','end'][j]}" class="ax">${fechaCorta(dias[d])}</text>`);
   if(presVar>0)s2+=`<line x1="${x2(d0)}" y1="${y2(0)}" x2="${x2(d1)}" y2="${y2(presVar)}" stroke="var(--muted)" stroke-width="2" stroke-dasharray="5 4"/><text x="${x2(d1)-4}" y="${y2(presVar)-6}" text-anchor="end" class="ax">Ritmo ideal</text>`;
   if(acum.length){const path=acum.map(([d,v],i)=>(i?'L':'M')+x2(d)+','+y2(v)).join(' ');const last=acum[acum.length-1];
     s2+=`<path d="${path} L${x2(last[0])},${y2(0)} L${x2(d0)},${y2(0)} Z" fill="var(--accent-soft)" opacity=".8"/><path d="${path}" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round"/>
