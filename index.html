@@ -180,6 +180,15 @@ input[type=checkbox]{width:18px;height:18px;padding:0;accent-color:var(--accent)
 .catgrid button{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--line);background:var(--bg);border-radius:99px;padding:8px 12px;font-size:.88rem}
 .catgrid button[aria-pressed="true"]{border-color:var(--accent);background:var(--accent-soft);color:var(--accent);font-weight:600}
 
+.av{border-radius:50%;object-fit:cover;background:var(--accent-soft);color:var(--accent);display:grid;place-items:center;font-weight:700;font-family:var(--f-display);overflow:hidden;flex:none}
+.hello{display:flex;gap:12px;align-items:center}
+.hello button{border:0;background:none;padding:0;border-radius:50%}
+.hello b{font-family:var(--f-display);font-size:1.15rem;display:block;line-height:1.2}
+.profile-top{display:flex;gap:16px;align-items:center}
+.swatches{display:flex;gap:12px;flex-wrap:wrap}
+.sw{width:38px;height:38px;border-radius:50%;border:3px solid var(--surface);box-shadow:0 0 0 1px var(--line)}
+.sw[aria-pressed="true"]{box-shadow:0 0 0 3px var(--ink)}
+.tabav{width:24px;height:24px;border-radius:50%;object-fit:cover}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(92px + env(safe-area-inset-bottom,0px));z-index:30;background:var(--ink);color:var(--bg);padding:10px 12px 10px 16px;border-radius:12px;font-size:.9rem;display:flex;gap:12px;align-items:center;max-width:calc(100% - 32px)}
 .toast button{border:0;background:none;color:var(--accent);font-weight:600;filter:brightness(1.4)}
 @media (prefers-reduced-motion:no-preference){.bar i,.progress i{transition:width .45s ease}.sheet{animation:up .22s ease}@keyframes up{from{transform:translateY(24px);opacity:.6}to{transform:none;opacity:1}}}
@@ -195,7 +204,7 @@ input[type=checkbox]{width:18px;height:18px;padding:0;accent-color:var(--accent)
   <button data-view="movs" aria-current="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h10"/></svg>Movimientos</button>
   <button class="plus" id="plus" aria-label="Registrar movimiento">+</button>
   <button data-view="metas" aria-current="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/></svg>Metas</button>
-  <button data-view="ajustes" aria-current="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg>Ajustes</button>
+  <button data-view="ajustes" aria-current="false" id="tabPerfil"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg>Perfil</button>
 </div></nav>
 
 <div class="overlay" id="sheet" hidden>
@@ -268,6 +277,7 @@ function render(){
   if(!sb){return}
   if(!user){if(!entered)renderAuth();return}
   if(!loaded)return;
+  aplicarAspecto();asegurarAvatar();pintarTabPerfil();
   if(!cfg){const loc=datosLocales();view.innerHTML=`<div class="empty"><h2>Tu cuenta está lista</h2><p>Aún no tiene datos. Elige cómo empezar:</p><p style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">${loc?'<button class="btn primary" data-act="subirlocal">Subir los datos de este dispositivo</button>':''}<button class="btn ${loc?'':'primary'}" data-act="importar">Restaurar una copia</button><button class="btn" data-act="initcfg">Empezar desde cero</button></p></div>`;return}
   view.innerHTML=({inicio:vInicio,movs:vMovs,metas:vMetas,ajustes:vAjustes}[curView])();
 }
@@ -302,7 +312,8 @@ function vInicio(){
     return `<div class="brow"><div class="n"><span class="dot" style="background:${colorOf(c)}"></span>${esc(c.nombre)}</div><div class="r num">${fmt(r)} <span class="muted">/ ${fmt(p)}</span></div>
     <div class="bar"><i class="${cls}" style="width:${Math.min(pct,100)}%"></i></div><div>${tag}</div></div>`}).join('');
   const chips=cfg.categorias.filter(c=>c.tipo==='gasto'&&!c.fijo).map(c=>`<button class="chip-btn" data-act="quick" data-cat="${esc(c.id)}"><span class="dot" style="background:${colorOf(c)}"></span>${esc(c.nombre)}</button>`).join('');
-  return `<section>${qHeader()}
+  return `<section><div class="hello"><button data-act="irperfil" aria-label="Ir a mi perfil">${avatarHtml(46)}</button><div style="min-width:0"><b>${saludo()}${primerNombre()?', '+esc(primerNombre()):''}</b>${cfg.frase?`<span class="small muted">${esc(cfg.frase)}</span>`:''}</div></div>
+  ${qHeader()}
   <div class="hero ${libre<0?'neg':''}"><span class="label">Libre para gastar</span><span class="big">${fmt(libre)}</span>
     <p>${libre<0?'Te estás pasando. Revisa tus gastos de esta quincena.':esperado?'Ya descontamos tus pagos pendientes. Incluye tu sueldo, que aún no registras.':'Ya descontamos lo que te falta pagar y ahorrar.'}</p>
     <div class="trio"><div><span>Entró</span><b>${fmtK(ing)}</b></div><div><span>Gastaste</span><b>${fmtK(gas)}</b></div><div><span>Ahorraste</span><b>${fmtK(aho)}</b></div></div></div>
@@ -379,7 +390,8 @@ function vAjustes(){
     <div class="field"><label for="dp${i}">Ya pagado antes de usar la app</label><input id="dp${i}" class="num" inputmode="numeric" data-bind="deudas.${i}.pagadoInicial" data-money value="${fmt(d.pagadoInicial)}"></div>
     <div class="field"><label for="dz${i}">Nota</label><input id="dz${i}" data-bind="deudas.${i}.nota" value="${esc(d.nota)}"></div></div>
     <div class="opts"><button class="btn ghost" style="padding:4px 10px" data-act="deldeuda" data-i="${i}">Quitar deuda</button></div></div>`).join('');
-  return `<section><div><div class="label">Tu plan</div><h1>Ajustes</h1></div>
+  return `<section><div><div class="label">Tu cuenta y tu plan</div><h1>Perfil</h1></div>
+  ${vPerfilCard()}
   <div class="alert ${sobra<0?'bad':sobra>0?'info':'good'}">${sobra<0?`Tu plan pide <b class="num">${fmt(mesPlan)}</b> al mes y recibes <b class="num">${fmt(mesNeto)}</b>. Te faltan <b class="num">${fmt(-sobra)}</b>: baja alguna categoría.`:sobra>0?`Te quedan <b class="num">${fmt(sobra)}</b> al mes sin asignar. Puedes sumarlos al ahorro o al pago de tu deuda.`:'Cada peso de tu sueldo tiene un destino. Plan perfecto.'}</div>
   <div class="card"><h2>Tu sueldo</h2><div class="grid2">
     <div class="field"><label for="sal">Salario mensual (antes de descuentos)</label><input id="sal" class="num" inputmode="numeric" data-bind="salario" data-money value="${fmt(cfg.salario)}"></div>
@@ -482,7 +494,7 @@ const cacheKey=()=>'misquincenas.cache2.'+(user?user.id:'');
 function saveCache(){try{localStorage.setItem(cacheKey(),JSON.stringify({srv,srvEstado}))}catch(e){}}
 const fondoMeta=()=>srv.metas.find(m=>m.tipo==='fondo_emergencia');
 function buildCfg(){const p=srv.perfil;if(!p||!p.configurado)return null;const f=fondoMeta();
-  return{salario:+p.salario_mensual,ssPct:+p.pct_seguridad_social,otrosIngresos:+p.otros_ingresos_mensual,
+  return{nombre:p.nombre||'',frase:p.frase||'',color:p.color_acento||'azul',tema:p.tema||'auto',avatarPath:p.avatar_path||null,salario:+p.salario_mensual,ssPct:+p.pct_seguridad_social,otrosIngresos:+p.otros_ingresos_mensual,
     metaFondo:f?+f.monto_objetivo:0,fondoInicial:f?+f.ahorrado_inicial:0,fondoId:f?f.id:null,
     categorias:srv.categorias.slice().sort((a,b)=>a.orden-b.orden).map(c=>({id:c.id,nombre:c.nombre,tipo:c.tipo,clave:c.clave||null,mensual:+c.presupuesto_mensual,cuando:c.cuando,fijo:c.fijo,deudaId:c.deuda_id||''})),
     deudas:srv.deudas.map(d=>({id:d.id,nombre:d.nombre,total:+d.monto_total,pagadoInicial:+d.pagado_inicial,nota:d.nota}))}}
@@ -506,7 +518,7 @@ async function refreshAll(){const u=user.id;
 let refreshT=null;function refreshSoon(){clearTimeout(refreshT);refreshT=setTimeout(()=>{if(user)refreshAll().catch(()=>{})},350)}
 
 async function guardarConfig(d){const u=user.id,now=new Date().toISOString();
-  ok(await sb.from('perfiles').upsert({user_id:u,salario_mensual:Math.round(+d.salario||0),pct_seguridad_social:+d.ssPct||0,otros_ingresos_mensual:Math.round(+d.otrosIngresos||0),configurado:true}));
+  ok(await sb.from('perfiles').upsert({user_id:u,nombre:String(d.nombre||'').slice(0,80),frase:String(d.frase||'').slice(0,120),color_acento:COLORES[d.color]?d.color:'azul',tema:['auto','claro','oscuro'].includes(d.tema)?d.tema:'auto',salario_mensual:Math.round(+d.salario||0),pct_seguridad_social:+d.ssPct||0,otros_ingresos_mensual:Math.round(+d.otrosIngresos||0),configurado:true}));
   const f=fondoMeta();const fondoId=d.fondoId||(f&&f.id)||newId();d.fondoId=fondoId;if(cfg)cfg.fondoId=fondoId;
   ok(await sb.from('metas').upsert({id:fondoId,user_id:u,nombre:'Fondo de emergencia',tipo:'fondo_emergencia',monto_objetivo:Math.round(+d.metaFondo||0),ahorrado_inicial:Math.round(+d.fondoInicial||0),borrado_en:null}));
   const dIds=new Set(d.deudas.map(x=>x.id));
@@ -546,7 +558,7 @@ async function cargarDatos(d,reemplazar){
   const tipos={};
   const categorias=(src.categorias||[]).map(c=>{const clave=c.clave||(c.id==='sal'?'salario':null);const n=clave==='salario'&&salExist?salExist.id:newId();idMap[c.id]=n;tipos[n]=c.tipo;
     return Object.assign({},c,{id:n,clave,deudaId:c.deudaId?dMap[c.deudaId]||'':''})});
-  const nuevo={salario:src.salario,ssPct:src.ssPct,otrosIngresos:src.otrosIngresos,metaFondo:src.metaFondo,fondoInicial:src.fondoInicial,fondoId:null,deudas:reemplazar?deudas:(cfg?cfg.deudas:[]).concat(deudas),categorias};
+  const nuevo={nombre:src.nombre??(cfg&&cfg.nombre)??'',frase:src.frase??(cfg&&cfg.frase)??'',color:src.color||(cfg&&cfg.color)||'azul',tema:src.tema||(cfg&&cfg.tema)||'auto',salario:src.salario,ssPct:src.ssPct,otrosIngresos:src.otrosIngresos,metaFondo:src.metaFondo,fondoInicial:src.fondoInicial,fondoId:null,deudas:reemplazar?deudas:(cfg?cfg.deudas:[]).concat(deudas),categorias};
   if(!reemplazar&&cfg){nuevo.categorias=cfg.categorias.concat(categorias.filter(c=>!(c.clave==='salario'&&cfg.categorias.some(x=>x.clave==='salario'))))}
   await guardarConfig(nuevo);
   if(reemplazar){ok(await sb.from('movimientos').update({borrado_en:new Date().toISOString()}).eq('user_id',user.id).is('borrado_en',null))}
@@ -611,6 +623,67 @@ document.addEventListener('visibilitychange',()=>{if(document.visibilityState===
 
 if(navigator.storage&&navigator.storage.persist)navigator.storage.persist().catch(()=>{});
 if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
+
+/* Perfil: foto, nombre, frase, color y tema */
+const COLORES={azul:['Azul','#2446C8','#8EA5FF','#E5EAFB','#1D2547'],verde:['Verde','#1A7F55','#5BD39A','#DFF3E9','#12301F'],morado:['Morado','#6B3FC4','#B99CF5','#ECE5FA','#271B45'],
+  coral:['Coral','#C2452D','#F59A84','#FBE6E1','#3A1C16'],turquesa:['Turquesa','#0E7A8A','#5CCAD9','#DDF2F4','#10303A'],rosa:['Rosa','#B8336A','#F28DB7','#F9E3EC','#3A1626']};
+const mqDark=window.matchMedia?matchMedia('(prefers-color-scheme: dark)'):null;
+function aplicarAspecto(){const root=document.documentElement;const tema=cfg&&cfg.tema||'auto';
+  if(tema==='claro')root.setAttribute('data-theme','light');else if(tema==='oscuro')root.setAttribute('data-theme','dark');else root.removeAttribute('data-theme');
+  const dark=tema==='oscuro'||(tema==='auto'&&mqDark&&mqDark.matches);const c=COLORES[cfg&&cfg.color]||COLORES.azul;
+  root.style.setProperty('--accent',dark?c[2]:c[1]);root.style.setProperty('--c1',dark?c[2]:c[1]);root.style.setProperty('--accent-soft',dark?c[4]:c[3]);
+  const m=document.querySelector('meta[name=theme-color]');if(m)m.setAttribute('content',c[1]);
+  try{localStorage.setItem('misquincenas.aspecto',JSON.stringify({tema,color:cfg&&cfg.color}))}catch(e){}}
+if(mqDark&&mqDark.addEventListener)mqDark.addEventListener('change',()=>aplicarAspecto());
+try{const a=JSON.parse(localStorage.getItem('misquincenas.aspecto')||'null');if(a){cfg={tema:a.tema,color:a.color};aplicarAspecto();cfg=null}}catch(e){}
+
+let avatarUrl=null,avatarFor=null;
+async function asegurarAvatar(){const path=cfg&&cfg.avatarPath||null;if(path===avatarFor)return;avatarFor=path;
+  if(!path){avatarUrl=null;render();return}
+  try{const k='misquincenas.av.'+path;const c=JSON.parse(localStorage.getItem(k)||'null');
+    if(c&&c.exp>Date.now()+3600e3){avatarUrl=c.url}else{const{data,error}=await sb.storage.from('avatares').createSignedUrl(path,604800);if(error)throw error;avatarUrl=data.signedUrl;
+      try{localStorage.setItem(k,JSON.stringify({url:avatarUrl,exp:Date.now()+6.5*864e5}))}catch(e){}}}catch(e){avatarUrl=null}
+  render()}
+function iniciales(){const n=(cfg&&cfg.nombre||user&&user.email||'?').trim();const p=n.split(/[\s@._-]+/).filter(Boolean);return((p[0]||'?')[0]+((p[1]||'')[0]||'')).toUpperCase()}
+function avatarHtml(px){return avatarUrl?`<img class="av" src="${esc(avatarUrl)}" alt="Tu foto" style="width:${px}px;height:${px}px">`:`<span class="av" style="width:${px}px;height:${px}px;font-size:${Math.round(px*.38)}px" aria-hidden="true">${esc(iniciales())}</span>`}
+function primerNombre(){return (cfg&&cfg.nombre||'').trim().split(/\s+/)[0]||''}
+function saludo(){const h=new Date().getHours();return h<12?'Buenos días':h<19?'Buenas tardes':'Buenas noches'}
+const tabPerfilSvg=document.querySelector('#tabPerfil')?document.querySelector('#tabPerfil').innerHTML:'';
+function pintarTabPerfil(){const b=document.querySelector('#tabPerfil');if(!b)return;b.innerHTML=(avatarUrl?`<img class="tabav" src="${esc(avatarUrl)}" alt="">`:tabPerfilSvg.replace(/Perfil$/,''))+'Perfil'}
+
+async function recortar(file){const url=URL.createObjectURL(file);try{const img=await new Promise((ok,ko)=>{const i=new Image();i.onload=()=>ok(i);i.onerror=ko;i.src=url});
+  const s=Math.min(img.naturalWidth,img.naturalHeight),N=320,cv=document.createElement('canvas');cv.width=cv.height=N;
+  cv.getContext('2d').drawImage(img,(img.naturalWidth-s)/2,(img.naturalHeight-s)/2,s,s,0,0,N,N);
+  return await new Promise(ok=>cv.toBlob(ok,'image/jpeg',.85))}finally{URL.revokeObjectURL(url)}}
+async function subirFoto(file){if(!file)return;toast('Subiendo foto…');
+  try{const blob=await recortar(file);if(!blob)throw new Error('No pude leer la imagen');const path=user.id+'/avatar-'+Date.now()+'.jpg';
+    const up=await sb.storage.from('avatares').upload(path,blob,{contentType:'image/jpeg',upsert:false});if(up.error)throw up.error;
+    const viejo=cfg.avatarPath;ok(await sb.from('perfiles').update({avatar_path:path}).eq('user_id',user.id));
+    if(viejo)sb.storage.from('avatares').remove([viejo]).catch(()=>{});
+    cfg.avatarPath=path;await refreshAll();toast('Foto actualizada')}
+  catch(e){toast('No se pudo subir la foto. Prueba con otra imagen.')}}
+async function quitarFoto(){const viejo=cfg.avatarPath;if(!viejo)return;
+  try{ok(await sb.from('perfiles').update({avatar_path:null}).eq('user_id',user.id));sb.storage.from('avatares').remove([viejo]).catch(()=>{});await refreshAll();toast('Foto quitada')}catch(e){toast('No se pudo quitar la foto.')}}
+const fotoIn=document.createElement('input');fotoIn.type='file';fotoIn.accept='image/*';fotoIn.hidden=true;document.body.appendChild(fotoIn);
+fotoIn.addEventListener('change',()=>{if(fotoIn.files[0])subirFoto(fotoIn.files[0]);fotoIn.value=''});
+document.addEventListener('click',e=>{const b=e.target.closest('[data-act]');if(!b||!cfg)return;const a=b.dataset.act;
+  if(a==='foto')fotoIn.click();else if(a==='quitarfoto')quitarFoto();
+  else if(a==='irperfil'){curView='ajustes';render();window.scrollTo(0,0)}
+  else if(a==='color'){cfg.color=b.dataset.c;aplicarAspecto();saveCfg();render()}
+  else if(a==='tema'){cfg.tema=b.dataset.t;aplicarAspecto();saveCfg();render()}});
+
+function vPerfilCard(){
+  const sw=Object.entries(COLORES).map(([k,c])=>`<button class="sw" data-act="color" data-c="${k}" aria-pressed="${(cfg.color||'azul')===k}" aria-label="${c[0]}" title="${c[0]}" style="background:${c[1]}"></button>`).join('');
+  const tm=[['auto','Automático'],['claro','Claro'],['oscuro','Oscuro']].map(([k,t])=>`<button type="button" data-act="tema" data-t="${k}" aria-pressed="${(cfg.tema||'auto')===k}">${t}</button>`).join('');
+  return `<div class="card profile">
+    <div class="profile-top">${avatarHtml(84)}<div style="min-width:0"><h2 style="font-size:1.3rem">${esc(cfg.nombre||'Tu nombre')}</h2><p class="small muted" style="margin:2px 0 8px;overflow-wrap:anywhere">${esc(user&&user.email||'')}</p>
+      <div class="row" style="justify-content:flex-start;gap:8px"><button class="btn soft" data-act="foto">${cfg.avatarPath?'Cambiar foto':'Poner foto'}</button>${cfg.avatarPath?'<button class="btn" data-act="quitarfoto">Quitar</button>':''}</div></div></div>
+    <div style="display:grid;gap:12px">
+      <div class="field"><label for="pNombre">Tu nombre</label><input id="pNombre" data-bind="nombre" maxlength="80" value="${esc(cfg.nombre||'')}" placeholder="Ej: Juan Felipe" autocomplete="name"></div>
+      <div class="field"><label for="pFrase">Tu frase o meta</label><input id="pFrase" data-bind="frase" maxlength="120" value="${esc(cfg.frase||'')}" placeholder="Ej: Libre de deudas en enero"></div></div>
+    <div><div class="lbl" style="margin-bottom:8px">Color de la app</div><div class="swatches">${sw}</div></div>
+    <div><div class="lbl" style="margin-bottom:8px">Tema</div><div class="seg">${tm}</div></div>
+  </div>`}
 
 db=cloudDb;
 db.doc('fin/config').onSnapshot(s=>{cfg=s.exists?JSON.parse(JSON.stringify(s.data())):null;loaded=true;render()});
