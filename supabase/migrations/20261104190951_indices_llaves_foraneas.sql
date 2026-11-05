@@ -1,0 +1,12 @@
+drop index if exists public.categorias_deuda, public.categorias_meta, public.movimientos_categoria, public.movimientos_cuenta, public.inversiones_cuenta, public.operaciones_inversion_idx;
+create index categorias_deuda_usuario on public.categorias (deuda_id, user_id) where deuda_id is not null;
+create index categorias_meta_usuario on public.categorias (meta_id, user_id) where meta_id is not null;
+create index cuentas_usuario on public.cuentas (user_id);
+create index deudas_usuario on public.deudas (user_id);
+create index metas_usuario on public.metas (user_id);
+create index inversiones_usuario on public.inversiones (user_id);
+create index inversiones_cuenta_usuario on public.inversiones (cuenta_id, user_id) where cuenta_id is not null;
+create index movimientos_categoria_usuario on public.movimientos (categoria_id, user_id);
+create index movimientos_cuenta_usuario on public.movimientos (cuenta_id, user_id) where cuenta_id is not null;
+create index operaciones_inversion_usuario on public.operaciones_inversion (user_id);
+create index operaciones_inversion_inv_usuario on public.operaciones_inversion (inversion_id, user_id);

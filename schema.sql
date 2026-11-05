@@ -1,11 +1,11 @@
--- La estructura de la base de datos está aplicada en el proyecto Supabase "mis-quincenas"
--- como migraciones: estructura_robusta_v2 e indices_llaves_foraneas.
--- Para verlas: Supabase → Database → Migrations.
+-- La estructura completa de la base de datos está en supabase/migrations/ (en orden por fecha).
+-- Para montarla en un proyecto nuevo de Supabase: ejecuta cada archivo, en orden, en el SQL Editor.
 --
 -- Resumen:
 --   perfiles, categorias, deudas, metas, cuentas, movimientos,
 --   inversiones, operaciones_inversion  → datos de cada usuario (RLS: cada quien solo ve lo suyo)
 --   historial                           → registro automático de cada cambio
 --   borrado_en                          → papelera (no hay borrado definitivo desde la app)
+--   storage "avatares"                  → fotos de perfil privadas, una carpeta por usuario
 --   v_resumen_quincena, v_deudas_estado, v_metas_estado,
 --   v_cuentas_saldo, v_inversiones_posicion, presupuesto_quincena(q) → cálculos en la base
