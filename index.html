@@ -211,6 +211,9 @@ input[type=checkbox]{width:18px;height:18px;padding:0;accent-color:var(--accent)
 .legend .ln{width:18px;height:0;border-top:2px dashed var(--ink);display:inline-block}
 .tip{margin:0;min-height:1.3em}.tip.on{color:var(--ink)}
 .danger-zone{border-color:var(--bad)}
+.catgrid .otra{border:1px dashed var(--accent);background:none;color:var(--accent);border-radius:99px;padding:8px 14px;font-weight:600}
+.nuevacat{display:flex;gap:8px;width:100%;align-items:center}
+.nuevacat input{flex:1;min-width:0}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(92px + env(safe-area-inset-bottom,0px));z-index:30;background:var(--ink);color:var(--bg);padding:10px 12px 10px 16px;border-radius:12px;font-size:.9rem;display:flex;gap:12px;align-items:center;max-width:calc(100% - 32px)}
 .toast button{border:0;background:none;color:var(--accent);font-weight:600;filter:brightness(1.4)}
 @media (prefers-reduced-motion:no-preference){.bar i,.progress i{transition:width .45s ease}.sheet{animation:up .22s ease}@keyframes up{from{transform:translateY(24px);opacity:.6}to{transform:none;opacity:1}}}
@@ -244,7 +247,7 @@ input[type=checkbox]{width:18px;height:18px;padding:0;accent-color:var(--accent)
     <div><div class="lbl" style="margin-bottom:6px">¿En qué?</div><div class="catgrid" id="catgrid"></div></div>
     <div class="grid2">
       <div class="field"><label for="fFecha">Fecha</label><input id="fFecha" type="date"></div>
-      <div class="field"><label for="fNota">Nota (opcional)</label><input id="fNota" autocomplete="off" placeholder="Ej: mercado del mes"></div>
+      <div class="field"><label for="fNota">Descripción (opcional)</label><input id="fNota" autocomplete="off" maxlength="120" placeholder="Ej: cine con amigos"></div>
     </div>
     <p class="small neg" id="fErr" hidden></p>
     <button class="btn primary wide" type="submit" id="saveBtn">Guardar</button>
@@ -363,7 +366,7 @@ function vMovs(){
   qm.forEach(m=>{if(m.fecha!==last){if(last)html+='</div>';last=m.fecha;const d=new Date(m.fecha+'T12:00');html+=`<div class="day">${m.fecha===today()?'Hoy':DIA[d.getDay()]+' '+d.getDate()}</div><div>`}
     const c=catById(m.cat);const n=c?c.nombre:'Sin categoría';
     html+=`<button class="mov" data-act="edit" data-id="${esc(m.id)}"><span class="avatar" style="background:${c?colorOf(c):'var(--muted)'}">${esc(n.charAt(0).toUpperCase())}</span>
-    <span style="min-width:0"><b>${esc(n)}</b><span class="s">${esc(m.nota||({gasto:'Gasto',ingreso:'Ingreso',ahorro:'Ahorro'}[m.tipo]))}</span></span>
+    <span style="min-width:0"><b>${esc(m.nota||n)}</b><span class="s">${esc(m.nota?n:({gasto:'Gasto',ingreso:'Ingreso',ahorro:'Ahorro'}[m.tipo]))}</span></span>
     <span class="amt ${m.tipo==='ingreso'?'pos':''}">${m.tipo==='ingreso'?'+':'−'}${fmt(m.monto)}</span></button>`});
   if(last)html+='</div>';
   const F=[['todos','Todos'],['gasto','Gastos'],['ingreso','Ingresos'],['ahorro','Ahorro'],['papelera','Papelera']].map(([k,t])=>`<button data-act="filtro" data-f="${k}" aria-pressed="${filtro===k}">${t}</button>`).join('');
@@ -484,7 +487,7 @@ document.addEventListener('click',e=>{const b=e.target.closest('[data-act]');if(
 
 /* Hoja de registro */
 function openSheet(m){
-  sheet={tipo:m&&m.tipo||'gasto',cat:m&&m.cat||'',editId:m&&m.id||null};
+  sheet={tipo:m&&m.tipo||'gasto',cat:m&&m.cat||'',editId:m&&m.id||null,nueva:false};
   $('#sheetTitle').textContent=sheet.editId?'Editar movimiento':'Nuevo movimiento';
   $('#fMonto').value=m&&m.monto?fmt(m.monto):'';$('#fNota').value=m&&m.nota||'';
   $('#fFecha').value=m&&m.fecha||qInfo(curQ).dateIn();$('#fErr').hidden=true;
@@ -493,14 +496,26 @@ function openSheet(m){
   paintSheet();$('#sheet').hidden=false;if(!(m&&m.cat)||!sheet.editId)setTimeout(()=>$('#fMonto').focus(),60)}
 function closeSheet(){$('#sheet').hidden=true;if(pending)render()}
 function paintSheet(){
-  document.querySelectorAll('.seg button').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.tipo===sheet.tipo)));
+  document.querySelectorAll('#movForm .seg button').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.tipo===sheet.tipo)));
   const cats=cfg.categorias.filter(c=>c.tipo===sheet.tipo);
   if(!cats.find(c=>c.id===sheet.cat))sheet.cat=cats[0]?cats[0].id:'';
-  $('#catgrid').innerHTML=cats.map(c=>`<button type="button" data-cat="${esc(c.id)}" aria-pressed="${c.id===sheet.cat}"><span class="dot" style="background:${colorOf(c)}"></span>${esc(c.nombre)}</button>`).join('')||'<span class="small muted">No tienes categorías de este tipo. Créalas en Ajustes.</span>';
+  $('#catgrid').innerHTML=cats.map(c=>`<button type="button" data-cat="${esc(c.id)}" aria-pressed="${c.id===sheet.cat}"><span class="dot" style="background:${colorOf(c)}"></span>${esc(c.nombre)}</button>`).join('')||'<span class="small muted">Aún no tienes categorías de este tipo.</span>';
+  $('#catgrid').insertAdjacentHTML('beforeend',sheet.nueva?`<div class="nuevacat"><input id="fNuevaCat" maxlength="60" autocomplete="off" placeholder="${{gasto:'Ej: Netflix, regalo, médico',ingreso:'Ej: freelance, venta, prima',ahorro:'Ej: viaje, moto, navidad'}[sheet.tipo]}" aria-label="Nombre de la nueva categoría"><button type="button" class="btn primary" id="okNueva">Agregar</button><button type="button" class="btn" id="noNueva" aria-label="Cancelar">✕</button></div>`:'<button type="button" class="otra" data-nueva="1">+ Otra</button>');
   const q=sheet.tipo==='gasto'?[5000,10000,20000,50000,100000]:sheet.tipo==='ahorro'?[50000,100000,200000,500000]:[netoQ()];
   $('#quick').innerHTML=q.map(n=>`<button type="button" data-q="${Math.round(n)}">${sheet.tipo==='ingreso'?'Mi quincena '+fmtK(n):'+'+fmtK(n)}</button>`).join('')}
-document.querySelectorAll('.seg button').forEach(b=>b.addEventListener('click',()=>{sheet.tipo=b.dataset.tipo;paintSheet()}));
-$('#catgrid').addEventListener('click',e=>{const b=e.target.closest('[data-cat]');if(!b)return;sheet.cat=b.dataset.cat;paintSheet()});
+document.querySelectorAll('#movForm .seg button').forEach(b=>b.addEventListener('click',()=>{sheet.tipo=b.dataset.tipo;sheet.nueva=false;paintSheet()}));
+$('#catgrid').addEventListener('click',e=>{
+  if(e.target.closest('[data-nueva]')){sheet.nueva=true;paintSheet();setTimeout(()=>$('#fNuevaCat')&&$('#fNuevaCat').focus(),30);return}
+  if(e.target.closest('#okNueva')){crearCatRapida();return}
+  if(e.target.closest('#noNueva')){sheet.nueva=false;paintSheet();return}
+  const b=e.target.closest('[data-cat]');if(!b)return;sheet.cat=b.dataset.cat;paintSheet()});
+$('#catgrid').addEventListener('keydown',e=>{if(e.target.id==='fNuevaCat'&&e.key==='Enter'){e.preventDefault();crearCatRapida()}});
+function crearCatRapida(){const i=$('#fNuevaCat');const nombre=(i&&i.value||'').trim().replace(/\s+/g,' ').slice(0,60);
+  if(!nombre){i&&i.focus();return false}
+  const ya=cfg.categorias.find(c=>c.tipo===sheet.tipo&&c.nombre.toLowerCase()===nombre.toLowerCase());
+  if(ya){sheet.cat=ya.id}else{const c={id:newId(),nombre:nombre.charAt(0).toUpperCase()+nombre.slice(1),tipo:sheet.tipo,mensual:0,cuando:'ambas',fijo:false,enRitmo:true,deudaId:''};
+    cfg.categorias.push(c);saveCfg();sheet.cat=c.id;toast('Categoría “'+c.nombre+'” creada')}
+  sheet.nueva=false;paintSheet();return true}
 $('#quick').addEventListener('click',e=>{const b=e.target.closest('[data-q]');if(!b)return;const n=+b.dataset.q;
   $('#fMonto').value=fmt(sheet.tipo==='ingreso'?n:parseMoney($('#fMonto').value)+n)});
 $('#plus').addEventListener('click',()=>{if(cfg)openSheet(null)});
@@ -515,9 +530,11 @@ $('#delBtn').addEventListener('click',()=>{const b=$('#delBtn');
 $('#movForm').addEventListener('submit',async e=>{e.preventDefault();
   const monto=parseMoney($('#fMonto').value),fecha=$('#fFecha').value,err=$('#fErr');
   if(!monto){err.textContent='Escribe cuánto fue.';err.hidden=false;$('#fMonto').focus();return}
+  if(sheet.nueva&&$('#fNuevaCat')&&$('#fNuevaCat').value.trim())crearCatRapida();
   if(!sheet.cat){err.textContent='Elige en qué fue.';err.hidden=false;return}
   if(!fecha){err.textContent='Elige una fecha.';err.hidden=false;return}
   const data={fecha,tipo:sheet.tipo,cat:sheet.cat,monto,nota:$('#fNota').value.trim().slice(0,120)};
+  await saving;
   try{if(sheet.editId){const old=movs.find(x=>x.id===sheet.editId);data.creado=old&&old.creado||new Date().toISOString();await db.doc('movs/'+sheet.editId).set(data);toast('Cambios guardados')}
     else{data.creado=new Date().toISOString();const r=await db.collection('movs').add(data);toast((sheet.tipo==='gasto'?'Gasto':sheet.tipo==='ahorro'?'Ahorro':'Ingreso')+' guardado: '+fmt(monto),()=>r.delete())}
     curQ=qKey(fecha);closeSheet();render()}

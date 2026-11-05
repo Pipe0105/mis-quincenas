@@ -1,5 +1,5 @@
 // Guarda la app para que abra sin internet. Sube CACHE cuando cambies archivos.
-const CACHE = 'mis-quincenas-v6';
+const CACHE = 'mis-quincenas-v7';
 const FILES = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png', './apple-touch-icon.png', './config.js'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES))); self.skipWaiting(); });
 self.addEventListener('activate', e => {
