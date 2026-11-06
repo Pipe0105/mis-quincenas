@@ -214,6 +214,7 @@ input[type=checkbox]{width:18px;height:18px;padding:0;accent-color:var(--accent)
 .catgrid .otra{border:1px dashed var(--accent);background:none;color:var(--accent);border-radius:99px;padding:8px 14px;font-weight:600}
 .nuevacat{display:flex;gap:8px;width:100%;align-items:center}
 .nuevacat input{flex:1;min-width:0}
+.clave{display:flex;flex-direction:column;gap:12px;border-top:1px solid var(--line);padding-top:12px}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(92px + env(safe-area-inset-bottom,0px));z-index:30;background:var(--ink);color:var(--bg);padding:10px 12px 10px 16px;border-radius:12px;font-size:.9rem;display:flex;gap:12px;align-items:center;max-width:calc(100% - 32px)}
 .toast button{border:0;background:none;color:var(--accent);font-weight:600;filter:brightness(1.4)}
 @media (prefers-reduced-motion:no-preference){.bar i,.progress i{transition:width .45s ease}.sheet{animation:up .22s ease}@keyframes up{from{transform:translateY(24px);opacity:.6}to{transform:none;opacity:1}}}
@@ -444,7 +445,15 @@ function vAjustes(){
     <div class="field"><label for="fi">Lo que ya tenías ahorrado</label><input id="fi" class="num" inputmode="numeric" data-bind="fondoInicial" data-money value="${fmt(cfg.fondoInicial)}"></div></div></div>
   <div class="card"><h2>Deudas</h2><div>${deudas||'<p class="small muted">Sin deudas.</p>'}</div><button class="btn ghost" data-act="adddeuda">+ Agregar deuda</button></div>
   <div class="card"><h2>Tu cuenta</h2><p class="small" style="margin:0">Conectado como <b>${esc(user&&user.email)}</b>. Tus datos se sincronizan entre todos los dispositivos donde entres con esta cuenta.</p>
-    <div class="row" style="justify-content:flex-start"><button class="btn" data-act="logout">Cerrar sesión</button></div></div>
+    ${clavePaso?`<form id="claveForm" class="clave" novalidate>
+      <div class="field"><label for="cActual">Contraseña actual</label><input id="cActual" type="password" autocomplete="current-password"></div>
+      <div class="field"><label for="cNueva">Nueva contraseña</label><input id="cNueva" type="password" autocomplete="new-password" minlength="6"></div>
+      <div class="field"><label for="cNueva2">Repite la nueva contraseña</label><input id="cNueva2" type="password" autocomplete="new-password" minlength="6"></div>
+      <label class="small" style="display:flex;gap:8px;align-items:center"><input type="checkbox" data-ver="claveForm"> Mostrar contraseñas</label>
+      <p class="small neg" id="cErr" hidden></p>
+      <div class="row" style="justify-content:flex-start"><button class="btn primary" type="submit">Guardar nueva contraseña</button><button class="btn" type="button" data-act="cancelarclave">Cancelar</button></div>
+      <p class="small muted" style="margin:0">¿No recuerdas la actual? Cierra sesión y usa “Olvidé mi contraseña”.</p></form>`
+    :`<div class="row" style="justify-content:flex-start"><button class="btn" data-act="cambiarclave">Cambiar contraseña</button><button class="btn" data-act="logout">Cerrar sesión</button></div>`}</div>
   <div class="card"><h2>Copias de seguridad</h2><p class="small muted" style="margin:0">Tus datos ya están en la nube. Igual puedes descargar una copia de vez en cuando. Restaurar una copia reemplaza todo lo que tienes en tu cuenta.</p>
     <p class="small" style="margin:0">Última copia: <b>${(()=>{try{return localStorage.getItem(KEY+'.ultimaCopia')||'nunca'}catch(e){return 'nunca'}})()}</b></p>
     <div class="row" style="justify-content:flex-start"><button class="btn primary" data-act="exportar">Descargar copia</button><button class="btn" data-act="importar">Restaurar copia</button></div></div>
@@ -639,6 +648,8 @@ function renderAuth(){const[t,b]=AUTH[authView];
   <form class="card" id="authForm" novalidate>
     ${authView!=='nuevaclave'?`<div class="field"><label for="aEmail">Correo</label><input id="aEmail" type="email" autocomplete="email" inputmode="email" required></div>`:''}
     ${authView!=='olvido'?`<div class="field"><label for="aPass">Contraseña</label><input id="aPass" type="password" autocomplete="${authView==='login'?'current-password':'new-password'}" minlength="6" required></div>`:''}
+    ${authView==='nuevaclave'||authView==='registro'?`<div class="field"><label for="aPass2">Repite la contraseña</label><input id="aPass2" type="password" autocomplete="new-password" minlength="6" required></div>`:''}
+    ${authView!=='olvido'?'<label class="small" style="display:flex;gap:8px;align-items:center"><input type="checkbox" data-ver="authForm"> Mostrar contraseña</label>':''}
     ${authMsg?`<p class="small" style="margin:0" id="aMsg">${authMsg}</p>`:''}
     <button class="btn primary wide" type="submit">${b}</button>
   </form>
@@ -660,12 +671,13 @@ document.addEventListener('submit',async e=>{if(e.target.id!=='authForm')return;
   const show=(m)=>{authMsg=m;if(document.activeElement)document.activeElement.blur();renderAuth()};
   if(authView!=='nuevaclave'&&!/^\S+@\S+\.\S+$/.test(email||''))return show('<span class="neg">Escribe un correo válido.</span>');
   if(authView!=='olvido'&&(pass||'').length<6)return show('<span class="neg">La contraseña debe tener al menos 6 caracteres.</span>');
+  if((authView==='nuevaclave'||authView==='registro')&&pass!==($('#aPass2')||{}).value)return show('<span class="neg">Las contraseñas no coinciden.</span>');
   btn.disabled=true;btn.textContent='Un momento…';const back=location.origin+location.pathname;
   try{
     if(authView==='login'){const{error}=await sb.auth.signInWithPassword({email,password:pass});if(error)throw error}
     else if(authView==='registro'){const{data,error}=await sb.auth.signUp({email,password:pass,options:{emailRedirectTo:back}});if(error)throw error;
       if(!data.session){authView='login';show('<span class="pos">Te enviamos un correo a '+esc(email)+'. Ábrelo y toca el enlace para activar tu cuenta; luego entra aquí.</span>')}}
-    else if(authView==='olvido'){const{error}=await sb.auth.resetPasswordForEmail(email,{redirectTo:back});if(error)throw error;authView='login';show('<span class="pos">Si el correo tiene cuenta, te llegó un enlace para cambiar la contraseña.</span>')}
+    else if(authView==='olvido'){const{error}=await sb.auth.resetPasswordForEmail(email,{redirectTo:back});if(error)throw error;authView='login';show('<span class="pos">Si el correo tiene cuenta, te llegó un enlace para crear una contraseña nueva. Ábrelo en este mismo celular o computador (revisa también spam). El enlace vence en 1 hora.</span>')}
     else if(authView==='nuevaclave'){const{error}=await sb.auth.updateUser({password:pass});if(error)throw error;authView='login';authMsg='';toast('Contraseña actualizada');history.replaceState(null,'',back);enterApp()}
   }catch(err){show('<span class="neg">'+errEs(err)+'</span>')}});
 
@@ -830,6 +842,26 @@ document.addEventListener('click',async e=>{const b=e.target.closest('[data-act]
   else if(a==='borrartodo'){const i=document.querySelector('#confBorrar');if(!i||i.value.trim().toUpperCase()!=='BORRAR'){toast('Escribe BORRAR para confirmar.');i&&i.focus();return}
     b.disabled=true;b.textContent='Borrando…';i.blur();
     try{await borrarTodo();borrarPaso=false;curView='inicio';curQ=qKey(today());render();toast('Listo, empiezas de cero.')}catch(err){b.disabled=false;b.textContent='Borrar todo';toast('No se pudo borrar. Revisa tu conexión.')}}});
+
+/* Contraseña: cambiarla estando adentro, mostrarla y avisar si el enlace de recuperación venció */
+let clavePaso=false;
+document.addEventListener('change',e=>{const t=e.target;if(t.dataset&&t.dataset.ver){const f=document.getElementById(t.dataset.ver);if(f)f.querySelectorAll('input[autocomplete$="password"]').forEach(i=>i.type=t.checked?'text':'password')}});
+document.addEventListener('click',e=>{const b=e.target.closest('[data-act]');if(!b)return;
+  if(b.dataset.act==='cambiarclave'){clavePaso=true;render();setTimeout(()=>{const i=$('#cActual');if(i){i.focus();i.scrollIntoView({block:'center'})}},50)}
+  else if(b.dataset.act==='cancelarclave'){clavePaso=false;if(document.activeElement)document.activeElement.blur();render()}});
+document.addEventListener('submit',async e=>{if(e.target.id!=='claveForm')return;e.preventDefault();
+  const act=$('#cActual').value,n1=$('#cNueva').value,n2=$('#cNueva2').value,err=$('#cErr'),btn=e.target.querySelector('button[type=submit]');
+  const fallo=m=>{err.textContent=m;err.hidden=false};err.hidden=true;
+  if(!act)return fallo('Escribe tu contraseña actual.');if(n1.length<6)return fallo('La nueva contraseña debe tener al menos 6 caracteres.');
+  if(n1!==n2)return fallo('Las contraseñas nuevas no coinciden.');if(n1===act)return fallo('La nueva contraseña debe ser distinta a la actual.');
+  btn.disabled=true;btn.textContent='Guardando…';
+  try{const v=await sb.auth.signInWithPassword({email:user.email,password:act});if(v.error){if(/Invalid login/i.test(v.error.message))throw new Error('actual');throw v.error}
+    const{error}=await sb.auth.updateUser({password:n1});if(error)throw error;
+    clavePaso=false;if(document.activeElement)document.activeElement.blur();render();toast('Contraseña cambiada')}
+  catch(x){btn.disabled=false;btn.textContent='Guardar nueva contraseña';fallo(x&&x.message==='actual'?'La contraseña actual no es correcta.':errEs(x).replace(/<[^>]+>/g,''))}});
+(()=>{const h=new URLSearchParams((location.hash||'').slice(1)+'&'+(location.search||'').slice(1));const code=h.get('error_code')||h.get('error');
+  if(code){authMsg='<span class="neg">'+(/expired/i.test(code+h.get('error_description'))?'El enlace del correo ya venció o ya se usó. Pide uno nuevo con “Olvidé mi contraseña”.':'El enlace del correo no es válido. Pide uno nuevo con “Olvidé mi contraseña”.')+'</span>';
+    if(/expired|otp|invalid|denied/i.test(code))authView='olvido';history.replaceState(null,'',location.origin+location.pathname)}})();
 
 db=cloudDb;
 db.doc('fin/config').onSnapshot(s=>{cfg=s.exists?JSON.parse(JSON.stringify(s.data())):null;loaded=true;render()});
