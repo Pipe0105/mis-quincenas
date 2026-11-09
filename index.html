@@ -215,6 +215,10 @@ input[type=checkbox]{width:18px;height:18px;padding:0;accent-color:var(--accent)
 .nuevacat{display:flex;gap:8px;width:100%;align-items:center}
 .nuevacat input{flex:1;min-width:0}
 .clave{display:flex;flex-direction:column;gap:12px;border-top:1px solid var(--line);padding-top:12px}
+.trio.four{grid-template-columns:repeat(4,minmax(0,1fr))}
+.trio.four b{font-size:.85rem}
+.hero.plan{background:var(--surface);color:var(--ink);border:1.5px dashed var(--line)}
+.hero.plan .trio div{background:var(--sunk)}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(92px + env(safe-area-inset-bottom,0px));z-index:30;background:var(--ink);color:var(--bg);padding:10px 12px 10px 16px;border-radius:12px;font-size:.9rem;display:flex;gap:12px;align-items:center;max-width:calc(100% - 32px)}
 .toast button{border:0;background:none;color:var(--accent);font-weight:600;filter:brightness(1.4)}
 @media (prefers-reduced-motion:no-preference){.bar i,.progress i{transition:width .45s ease}.sheet{animation:up .22s ease}@keyframes up{from{transform:translateY(24px);opacity:.6}to{transform:none;opacity:1}}}
@@ -339,12 +343,16 @@ function vInicio(){
   const salPend=pend.find(p=>p.c.clave==='salario');const esperado=salPend&&salPend.hecho<salPend.meta?salPend.meta-salPend.hecho:0;
   const facturas=cfg.categorias.filter(c=>c.tipo==='gasto'&&!c.fijo&&c.enRitmo===false).reduce((t,c)=>t+Math.max(catQ(c,curQ)-sum(qm.filter(m=>m.cat===c.id)),0),0);
   const porPagar=pend.filter(p=>p.c.clave!=='salario').reduce((t,p)=>t+Math.max(p.meta-p.hecho,0),0)+facturas;
-  const libre=ing+esperado-gas-aho-porPagar;
+  const hoyQ=qKey(today()),futura=curQ>hoyQ,inicioQ=fechaCorta(qBounds(curQ).start);
+  const prev=movs.filter(m=>qKey(m.fecha)<curQ);
+  const venia=sum(prev.filter(m=>m.tipo==='ingreso'))-sum(prev.filter(m=>m.tipo==='gasto'))-sum(prev.filter(m=>m.tipo==='ahorro'));
+  const libre=venia+ing-gas-aho-porPagar;
+  const planPagos=porPagar,sueldoEsp=netoQ();
   const done=pend.filter(p=>p.hecho>=p.meta-1).length;
   const todos=pend.map(p=>{const ok=p.hecho>=p.meta-1;const falta=p.meta-p.hecho;
     return `<div class="todo ${ok?'done':''}"><span class="check" aria-hidden="true">✓</span><div style="min-width:0"><div class="tn">${esc(p.txt)}</div>
     <div class="small muted num">${ok?fmt(p.hecho):(p.hecho>0?`${fmt(p.hecho)} de ${fmt(p.meta)}`:fmt(p.meta))}</div></div>
-    ${ok?'<span class="tag good">Listo</span>':`<button class="btn soft" data-act="cumplir" data-cat="${esc(p.c.id)}" data-monto="${Math.round(falta)}">${esc(p.accion)}</button>`}</div>`}).join('');
+    ${ok?'<span class="tag good">Listo</span>':futura?`<span class="tag info">Desde el ${inicioQ}</span>`:`<button class="btn soft" data-act="cumplir" data-cat="${esc(p.c.id)}" data-monto="${Math.round(falta)}">${esc(p.accion)}</button>`}</div>`}).join('');
   const vars=cfg.categorias.filter(c=>c.tipo==='gasto'&&!c.fijo).map(c=>{const p=catQ(c,curQ),r=sum(qm.filter(m=>m.cat===c.id));return{c,p,r}}).filter(x=>x.p>0||x.r>0);
   const bars=vars.map(({c,p,r})=>{const pct=p?r/p*100:100,cls=pct>100?'over':pct>85?'warn':'';
     const tag=p===0?'<span class="tag bad">sin presupuesto</span>':pct>100?`<span class="tag bad">te pasaste ${fmt(r-p)}</span>`:`<span class="tag ${pct>85?'warn':'good'}">te quedan ${fmt(p-r)}</span>`;
@@ -353,11 +361,14 @@ function vInicio(){
   const chips=cfg.categorias.filter(c=>c.tipo==='gasto'&&!c.fijo).map(c=>`<button class="chip-btn" data-act="quick" data-cat="${esc(c.id)}"><span class="dot" style="background:${colorOf(c)}"></span>${esc(c.nombre)}</button>`).join('');
   return `<section><div class="hello"><button data-act="irperfil" aria-label="Ir a mi perfil">${avatarHtml(46)}</button><div style="min-width:0"><b>${saludo()}${primerNombre()?', '+esc(primerNombre()):''}</b>${cfg.frase?`<span class="small muted">${esc(cfg.frase)}</span>`:''}</div></div>
   ${qHeader()}
-  <div class="hero ${libre<0?'neg':''}"><span class="label">Libre para gastar</span><span class="big">${fmt(libre)}</span>
-    <p>${libre<0?'Te estás pasando. Revisa tus gastos de esta quincena.':esperado?'Ya descontamos tus pagos pendientes. Incluye tu sueldo, que aún no registras.':'Ya descontamos lo que te falta pagar y ahorrar.'}</p>
-    <div class="trio"><div><span>Entró</span><b>${fmtK(ing)}</b></div><div><span>Gastaste</span><b>${fmtK(gas)}</b></div><div><span>Ahorraste</span><b>${fmtK(aho)}</b></div></div></div>
+  ${futura?`<div class="hero plan"><span class="label">Quincena planeada</span><span class="big" style="font-size:1.7rem">Empieza el ${inicioQ}</span>
+    <p>Todavía no hay plata disponible aquí. El ${inicioQ} se suma lo que te sobre de la quincena anterior, y tu sueldo cuando lo marques como recibido.</p>
+    <div class="trio"><div><span>Sueldo esperado</span><b>${fmtK(sueldoEsp)}</b></div><div><span>Pagos y ahorro</span><b>${fmtK(planPagos)}</b></div><div><span>Sobraría</span><b>${fmtK(sueldoEsp-planPagos)}</b></div></div></div>`
+  :`<div class="hero ${libre<0&&!(esperado&&curQ===hoyQ)?'neg':''}"><span class="label">Libre para gastar</span><span class="big">${fmt(libre)}</span>
+    <p>${esperado&&curQ===hoyQ?'Solo cuenta plata real: tu sueldo de esta quincena se suma cuando lo marques como recibido.':libre<0?'No alcanza para lo que falta pagar. Revisa tus gastos o pagos pendientes.':'Ya descontamos lo que te falta pagar y ahorrar.'}</p>
+    <div class="trio four"><div><span>Venía</span><b>${fmtK(venia)}</b></div><div><span>Entró</span><b>${fmtK(ing)}</b></div><div><span>Gastaste</span><b>${fmtK(gas)}</b></div><div><span>Ahorraste</span><b>${fmtK(aho)}</b></div></div></div>`}
   ${pend.length?`<div class="card"><div class="row"><h2>Pendientes</h2><span class="small muted">${done} de ${pend.length} listos</span></div><div>${todos}</div></div>`:''}
-  ${chips?`<div class="card"><h2>Anotar un gasto rápido</h2><div class="chips">${chips}</div></div>`:''}
+  ${chips&&!futura?`<div class="card"><h2>Anotar un gasto rápido</h2><div class="chips">${chips}</div></div>`:''}
   ${bars?`<div class="card"><h2>¿Cómo vas con tu presupuesto?</h2><div>${bars}</div></div>`:''}
   </section>`}
 
