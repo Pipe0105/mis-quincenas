@@ -246,6 +246,7 @@ input[type=checkbox]{width:18px;height:18px;padding:0;accent-color:var(--accent)
     <input id="fMonto" class="amount" inputmode="numeric" autocomplete="off" placeholder="$ 0">
     <div class="quick" id="quick"></div>
     <div><div class="lbl" style="margin-bottom:6px">¿En qué?</div><div class="catgrid" id="catgrid"></div></div>
+    <div id="deudabox"></div>
     <div class="grid2">
       <div class="field"><label for="fFecha">Fecha</label><input id="fFecha" type="date"></div>
       <div class="field"><label for="fNota">Descripción (opcional)</label><input id="fNota" autocomplete="off" maxlength="120" placeholder="Ej: cine con amigos"></div>
@@ -302,9 +303,9 @@ function catQ(c,k){const h=+k.split('-')[2],m=+c.mensual||0;if(c.cuando==='q1')r
 const salidasCats=()=>cfg.categorias.filter(c=>c.tipo!=='ingreso');
 const presQ=k=>salidasCats().reduce((t,c)=>t+catQ(c,k),0);
 function colorOf(c){const i=cfg.categorias.indexOf(c);return 'var(--c'+((i>=0?i:0)%6+1)+')'}
-const fondoActual=()=>{const e=cfg.fondoId&&srvEstado.metas[cfg.fondoId];return e?+e.ahorrado:(+cfg.fondoInicial||0)+sum(movs.filter(m=>m.tipo==='ahorro'))};
+const fondoActual=()=>(+cfg.fondoInicial||0)+sum(movs.filter(m=>m.tipo==='ahorro'));
 const salCat=()=>cfg&&cfg.categorias.find(c=>c.clave==='salario');
-function deudaPagado(d){const e=srvEstado.deudas[d.id];if(e)return +e.pagado;return (+d.pagadoInicial||0)+sum(movs.filter(m=>{const c=catById(m.cat);return c&&c.deudaId===d.id&&m.tipo==='gasto'}))}
+function deudaPagado(d){return (+d.pagadoInicial||0)+sum(movs.filter(m=>{const c=catById(m.cat);return c&&c.deudaId===d.id&&m.tipo==='gasto'}))}
 
 function render(){
   if(view.contains(document.activeElement)&&document.activeElement.matches('input,select')){pending=true;return}
@@ -394,7 +395,7 @@ function vMetas(){
     return `<div class="card"><div class="row"><h2>${esc(d.nombre)}</h2>${rest===0?'<span class="tag good">Pagada</span>':`<span class="tag warn">Faltan ${fmt(rest)}</span>`}</div>
     <div class="progress"><i class="${rest===0?'good':''}" style="width:${p}%"></i></div>
     <div class="kv"><div><span class="small muted">Pagado</span><b>${fmt(pag)}</b></div><div><span class="small muted">Total</span><b>${fmt(d.total)}</b></div>
-    <div><span class="small muted">Terminas en</span><b>${rest===0?'¡Listo!':meses?eta(meses):'Define un pago'}</b></div></div>${d.nota?`<p class="small muted" style="margin:0">${esc(d.nota)}</p>`:''}</div>`}).join('');
+    <div><span class="small muted">Terminas en</span><b>${rest===0?'¡Listo!':meses?eta(meses):'Abona cuando puedas'}</b></div></div>${d.nota?`<p class="small muted" style="margin:0">${esc(d.nota)}</p>`:''}${rest>0?`<button class="btn primary" data-act="abonar" data-id="${esc(d.id)}">Registrar abono</button>`:''}</div>`}).join('');
   const nq=netoQ();let acc=fondoActual();const rows=[];
   for(let i=0;i<12;i++){const k=qShift(qKey(today()),i);const p=presQ(k);const ah=salidasCats().filter(c=>c.tipo==='ahorro').reduce((t,c)=>t+catQ(c,k),0);acc+=ah;const sob=nq-p;
     rows.push(`<tr><td>${esc(qInfo(k).short)}</td><td class="num">${fmt(nq)}</td><td class="num">${fmt(p)}</td><td class="num ${sob<0?'neg':''}">${fmt(sob)}</td><td class="num">${fmt(acc)}</td></tr>`)}
@@ -506,12 +507,12 @@ function openSheet(m){
 function closeSheet(){$('#sheet').hidden=true;if(pending)render()}
 function paintSheet(){
   document.querySelectorAll('#movForm .seg button').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.tipo===sheet.tipo)));
-  const cats=cfg.categorias.filter(c=>c.tipo===sheet.tipo);
+  const cats=cfg.categorias.filter(c=>c.tipo===sheet.tipo&&!(c.deudaId&&!c.fijo&&c.id!==sheet.cat&&/^Abono a /.test(c.nombre)));
   if(!cats.find(c=>c.id===sheet.cat))sheet.cat=cats[0]?cats[0].id:'';
   $('#catgrid').innerHTML=cats.map(c=>`<button type="button" data-cat="${esc(c.id)}" aria-pressed="${c.id===sheet.cat}"><span class="dot" style="background:${colorOf(c)}"></span>${esc(c.nombre)}</button>`).join('')||'<span class="small muted">Aún no tienes categorías de este tipo.</span>';
   $('#catgrid').insertAdjacentHTML('beforeend',sheet.nueva?`<div class="nuevacat"><input id="fNuevaCat" maxlength="60" autocomplete="off" placeholder="${{gasto:'Ej: Netflix, regalo, médico',ingreso:'Ej: freelance, venta, prima',ahorro:'Ej: viaje, moto, navidad'}[sheet.tipo]}" aria-label="Nombre de la nueva categoría"><button type="button" class="btn primary" id="okNueva">Agregar</button><button type="button" class="btn" id="noNueva" aria-label="Cancelar">✕</button></div>`:'<button type="button" class="otra" data-nueva="1">+ Otra</button>');
   const q=sheet.tipo==='gasto'?[5000,10000,20000,50000,100000]:sheet.tipo==='ahorro'?[50000,100000,200000,500000]:[netoQ()];
-  $('#quick').innerHTML=q.map(n=>`<button type="button" data-q="${Math.round(n)}">${sheet.tipo==='ingreso'?'Mi quincena '+fmtK(n):'+'+fmtK(n)}</button>`).join('')}
+  $('#quick').innerHTML=q.map(n=>`<button type="button" data-q="${Math.round(n)}">${sheet.tipo==='ingreso'?'Mi quincena '+fmtK(n):'+'+fmtK(n)}</button>`).join('');pintarDeudas()}
 document.querySelectorAll('#movForm .seg button').forEach(b=>b.addEventListener('click',()=>{sheet.tipo=b.dataset.tipo;sheet.nueva=false;paintSheet()}));
 $('#catgrid').addEventListener('click',e=>{
   if(e.target.closest('[data-nueva]')){sheet.nueva=true;paintSheet();setTimeout(()=>$('#fNuevaCat')&&$('#fNuevaCat').focus(),30);return}
@@ -862,6 +863,22 @@ document.addEventListener('submit',async e=>{if(e.target.id!=='claveForm')return
 (()=>{const h=new URLSearchParams((location.hash||'').slice(1)+'&'+(location.search||'').slice(1));const code=h.get('error_code')||h.get('error');
   if(code){authMsg='<span class="neg">'+(/expired/i.test(code+h.get('error_description'))?'El enlace del correo ya venció o ya se usó. Pide uno nuevo con “Olvidé mi contraseña”.':'El enlace del correo no es válido. Pide uno nuevo con “Olvidé mi contraseña”.')+'</span>';
     if(/expired|otp|invalid|denied/i.test(code))authView='olvido';history.replaceState(null,'',location.origin+location.pathname)}})();
+
+/* Abonos a deudas: cualquier día, cualquier valor */
+function catAbono(d){let c=cfg.categorias.find(x=>x.deudaId===d.id&&!x.fijo)||cfg.categorias.find(x=>x.deudaId===d.id);
+  if(!c){c={id:newId(),nombre:('Abono a '+d.nombre).slice(0,60),tipo:'gasto',mensual:0,cuando:'ambas',fijo:false,enRitmo:false,deudaId:d.id};cfg.categorias.push(c);saveCfg()}
+  return c}
+function pintarDeudas(){const box=$('#deudabox');if(!box)return;
+  const ds=sheet.tipo==='gasto'?cfg.deudas.filter(d=>(+d.total||0)-deudaPagado(d)>0||(catById(sheet.cat)||{}).deudaId===d.id):[];
+  if(!ds.length){box.innerHTML='';return}
+  const sel=(catById(sheet.cat)||{}).deudaId;
+  const chips=ds.map(d=>`<button type="button" data-deuda="${esc(d.id)}" aria-pressed="${sel===d.id}"><span class="dot" style="background:var(--warn)"></span>${esc(d.nombre)}</button>`).join('');
+  let hint='';if(sel){const d=cfg.deudas.find(x=>x.id===sel);if(d){const pag=deudaPagado(d),viejo=sheet.editId?(movs.find(m=>m.id===sheet.editId)||{}).monto||0:0,debe=Math.max((+d.total||0)-pag+viejo,0),m=parseMoney($('#fMonto').value);
+    hint=`<p class="small" style="margin:6px 0 0">Debes <b class="num">${fmt(debe)}</b>${m?` · después de este abono te quedan <b class="num">${fmt(Math.max(debe-m,0))}</b>${m>=debe?' <span class="tag good">¡La terminas!</span>':''}`:''}</p>`}}
+  box.innerHTML=`<div class="lbl" style="margin-bottom:6px">¿Es un abono a una deuda?</div><div class="catgrid">${chips}</div>${hint}`}
+document.addEventListener('click',e=>{const b=e.target.closest('[data-deuda]');if(b&&$('#deudabox').contains(b)){const d=cfg.deudas.find(x=>x.id===b.dataset.deuda);if(d){sheet.cat=catAbono(d).id;sheet.nueva=false;paintSheet()}return}
+  const a=e.target.closest('[data-act="abonar"]');if(a){const d=cfg.deudas.find(x=>x.id===a.dataset.id);if(d){const c=catAbono(d);openSheet({tipo:'gasto',cat:c.id})}}});
+document.addEventListener('input',e=>{if(e.target.id==='fMonto'&&!$('#sheet').hidden)pintarDeudas()});
 
 db=cloudDb;
 db.doc('fin/config').onSnapshot(s=>{cfg=s.exists?JSON.parse(JSON.stringify(s.data())):null;loaded=true;render()});
